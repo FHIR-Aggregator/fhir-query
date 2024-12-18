@@ -1,0 +1,49 @@
+description: A graph to traverse ResearchStudy, ResearchSubject, Patient, Specimen,
+  and DocumentReference.
+id: research-study-graph
+link:
+- params: identifier=TCGA-KIRC
+  sourceId: ROOT
+  targetId: ResearchStudy
+- params: _has:ResearchSubject:subject:study={path}&_revinclude=Group:member&_count=1000&_total=accurate
+  path: ResearchStudy.id
+  sourceId: ResearchStudy
+  targetId: Patient
+- params: subject={path}&_revinclude=DocumentReference:subject&_revinclude=Group:member&_count=1000&_total=accurate
+  path: Patient.id
+  sourceId: Patient
+  targetId: Specimen
+- params: subject={path}&_count=1000&_total=accurate
+  path: Patient.id
+  sourceId: Patient
+  targetId: Observation
+- params: subject={path}&_include=Procedure:encounter&_count=1000&_total=accurate
+  path: Patient.id
+  sourceId: Patient
+  targetId: Procedure
+- params: subject={path}&_include=MedicationAdministration:subject&_count=1000&_total=accurate
+  path: Patient.id
+  sourceId: Patient
+  targetId: MedicationAdministration
+- params: member={path}&_count=1000&_total=accurate
+  path: Specimen.id
+  sourceId: Specimen
+  targetId: Group
+- params: subject={path}&_count=1000&_total=accurate
+  path: Group.id
+  sourceId: Group
+  targetId: DocumentReference
+name: ResearchStudyGraph
+node:
+- nodeId: ROOT
+  type: ResearchStudy
+- nodeId: Patient
+  type: Patient
+- nodeId: Specimen
+  type: Specimen
+- nodeId: Group
+  type: Group
+- nodeId: DocumentReference
+  type: DocumentReference
+resourceType: GraphDefinition
+status: active

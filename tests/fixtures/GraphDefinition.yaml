@@ -1,0 +1,17 @@
+description: A graph to traverse ResearchStudy, ResearchSubject
+id: research-study-graph
+link:
+- params: identifier=UNUSED
+  sourceId: ROOT
+  targetId: ResearchStudy
+- params: _has:ResearchSubject:subject:study={path}&_revinclude=Group:member&_count=1000&_total=accurate
+  path: ResearchStudy.id
+  sourceId: ResearchStudy
+  targetId: Patient
+- params: subject={path}&_revinclude=DocumentReference:subject&_revinclude=Group:member&_count=1000&_total=accurate
+  path: Patient.id
+  sourceId: Patient
+  targetId: Specimen
+resourceType: GraphDefinition
+status: active
+name: ResearchStudyGraph

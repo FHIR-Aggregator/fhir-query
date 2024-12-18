@@ -1,0 +1,11 @@
+[tool.black]
+line-length = 132
+target-version = ['py312']
+
+[tool.mypy]
+python_version = 3.12
+strict = true
+
+[build-system]
+requires = ["setuptools", "wheel", "black", "mypy", "pytest", "pytest-cov", "pytest_httpx"]
+build-backend = "setuptools.build_meta"
