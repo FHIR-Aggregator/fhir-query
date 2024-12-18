@@ -13,7 +13,7 @@ setup(
     install_requires=parse_requirements("requirements.txt"),
     entry_points={
         "console_scripts": [
-            "fq=fhir_query:cli.main",
+            "fq=fhir_query:cli.cli",
         ],
     },
 )
