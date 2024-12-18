@@ -3,10 +3,11 @@ import asyncio
 import json
 import logging
 import sqlite3
-import sys
+
+from nested_lookup import nested_lookup
 import tempfile
 from collections import defaultdict
-from typing import Generator, Any, Optional
+from typing import Any, Optional, Callable
 
 import httpx
 from dotty_dict import dotty
@@ -47,14 +48,22 @@ class ResourceDB:
                 CREATE TABLE IF NOT EXISTS resources (
                     id VARCHAR NOT NULL,
                     resource_type VARCHAR NOT NULL,
+                    key VARCHAR NOT NULL,
                     resource JSON NOT NULL,
                     PRIMARY KEY (id, resource_type)
                 )
-            """
+                """
+            )
+            self.connection.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_resources_key
+                ON resources (key)
+                """
             )
 
     def add(self, resource: dict[str, Any]) -> None:
         """
+        Add a resource to the 'resources' table.
         Add a resource to the 'resources' table.
         :param resource: A dictionary with 'id', 'resourceType', and other fields.
         """
@@ -65,10 +74,15 @@ class ResourceDB:
             with self.connection:
                 self.connection.execute(
                     """
-                    INSERT INTO resources (id, resource_type, resource)
-                    VALUES (?, ?, ?)
+                    INSERT INTO resources (id, resource_type, key, resource)
+                    VALUES (?, ?, ?, ?)
                 """,
-                    (resource["id"], resource["resourceType"], json.dumps(resource)),
+                    (
+                        resource["id"],
+                        resource["resourceType"],
+                        f'{resource["resourceType"]}/{resource["id"]}',
+                        json.dumps(resource),
+                    ),
                 )
                 self.adds_counters[resource["resourceType"]] += 1
         except sqlite3.IntegrityError as e:
@@ -131,6 +145,38 @@ class ResourceDB:
         Close the database connection.
         """
         self.connection.close()
+
+    def aggregate(self) -> dict:
+        """Aggregate metadata counts resourceType(count)-count->resourceType(count)."""
+
+        nested_dict: Callable[[], defaultdict[str, defaultdict]] = lambda: defaultdict(defaultdict)
+
+        count_resource_types = self.count_resource_types()
+
+        summary = nested_dict()
+
+        for resource_type in count_resource_types:
+            resources = self.all_resources(resource_type)
+            for _ in resources:
+
+                if "count" not in summary[resource_type]:
+                    summary[resource_type]["count"] = 0
+                summary[resource_type]["count"] += 1
+
+                refs = nested_lookup("reference", _)
+                for ref in refs:
+                    # A codeable reference is an object with a codeable concept and a reference
+                    if isinstance(ref, dict):
+                        ref = ref["reference"]
+                    ref_resource_type = ref.split("/")[0]
+                    if "references" not in summary[resource_type]:
+                        summary[resource_type]["references"] = nested_dict()
+                    dst = summary[resource_type]["references"][ref_resource_type]
+                    if "count" not in dst:
+                        dst["count"] = 0
+                    dst["count"] += 1
+
+        return summary
 
 
 class GraphDefinitionRunner(ResourceDB):

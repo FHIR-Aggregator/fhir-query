@@ -2,22 +2,32 @@ import asyncio
 import json
 import logging
 import sys
+import pandas as pd
 
 import click
+from click_default_group import DefaultGroup
 import yaml
 from fhir.resources.graphdefinition import GraphDefinition
 from halo import Halo
 
 from fhir_query import GraphDefinitionRunner, setup_logging
+from fhir_query.dataframer import Dataframer
+from fhir_query.visualizer import visualize_aggregation
 
 
-@click.command()
+@click.group(cls=DefaultGroup, default="main")
+def cli():
+    """Run FHIR GraphDefinition traversal."""
+    pass
+
+
+@cli.command()
 @click.option("--fhir-base-url", required=True, help="Base URL of the FHIR server.")
 @click.option("--graph-definition-id", help="ID of the GraphDefinition.")
 @click.option("--graph-definition-file-path", help="Path to the GraphDefinition JSON file.")
 @click.option("--start-resource-type", required=True, help="ResourceType to start traversal.")
 @click.option("--start-resource-id", required=True, help="ID of the starting resource.")
-@click.option("--db_path", default="/tmp/fhir-graph.sqlite", help="path to of sqlite db")
+@click.option("--db-path", default="/tmp/fhir-graph.sqlite", help="path to of sqlite db")
 @click.option(
     "--dry-run",
     is_flag=True,
@@ -37,7 +47,7 @@ def main(
     dry_run: bool,
     log_file: str,
 ) -> None:
-    """Main function to run the FHIR GraphDefinition traversal."""
+    """Run FHIR GraphDefinition traversal."""
 
     setup_logging(debug, log_file)
 
@@ -84,5 +94,79 @@ def main(
             raise e
 
 
+@cli.command(name="visualize")
+@click.option("--db-path", default="/tmp/fhir-graph.sqlite", help="path to sqlite db")
+@click.option("--output-path", default="/tmp/fhir-graph.html", help="path output html")
+def visualize(db_path: str, output_path: str) -> None:
+    """Visualize the aggregation results."""
+    from fhir_query import ResourceDB
+
+    try:
+        db = ResourceDB(db_path=db_path)
+        visualize_aggregation(db.aggregate(), output_path)
+    except Exception as e:
+        logging.error(f"Error: {e}", exc_info=True)
+        click.echo(f"Error: {e}", file=sys.stderr)
+        # raise e
+
+
+@cli.command(name="summarize")
+@click.option("--db-path", default="/tmp/fhir-graph.sqlite", help="path to sqlite db")
+def summarize(db_path: str) -> None:
+    """Summarize the aggregation results."""
+    from fhir_query import ResourceDB
+
+    try:
+        db = ResourceDB(db_path=db_path)
+        yaml.dump(json.loads(json.dumps(db.aggregate())), sys.stdout, default_flow_style=False)
+
+    except Exception as e:
+        logging.error(f"Error: {e}", exc_info=True)
+        click.echo(f"Error: {e}", file=sys.stderr)
+        # raise e
+
+
+@cli.command(name="dataframe")
+# TODO - fix the default paths
+@click.option("--db-path", default="/tmp/fhir-graph.sqlite", help="path to sqlite db")
+@click.option("--output-path", default="/tmp/fhir-graph.tsv", help="path output tsv")
+@click.option(
+    "--dtale",
+    "launch_dtale",
+    default=False,
+    show_default=True,
+    is_flag=True,
+    help="Open the graph in a browser using the dtale package for interactive data exploration.",
+)
+@click.argument(
+    "data_type", required=True, type=click.Choice(["Specimen", "DocumentReference", "ResearchSubject"]), default="Specimen"
+)
+def dataframe(db_path: str, output_path: str, launch_dtale: bool, data_type: str) -> None:
+    """Create dataframes from the local db."""
+
+    try:
+        db = Dataframer(db_path=db_path)
+        # TODO - add more data types
+        assert data_type in ["Specimen"], f"Sorry {data_type} dataframe is not supported yet."
+        df = pd.DataFrame(db.flattened_specimens())
+        if launch_dtale:
+            # TODO - add check that dtale is installed
+            import dtale
+
+            dtale.show(df, subprocess=False, open_browser=True, port=40000)
+        else:
+            # export to csv
+            file_name = output_path if output_path else f"{data_type}.csv"
+            df.to_csv(file_name, index=False)
+            click.secho(f"Saved {file_name}", file=sys.stderr)
+        df.to_csv(output_path, index=False)
+        click.secho(f"Saved {output_path}", file=sys.stderr)
+
+    except Exception as e:
+        logging.error(f"Error: {e}", exc_info=True)
+        click.echo(f"Error: {e}", file=sys.stderr)
+        # raise e
+
+
 if __name__ == "__main__":
-    main()
+    cli()

@@ -1,39 +1,10 @@
+---
+resourceType: GraphDefinition
+id: research-study-graph
+name: ResearchStudyGraph
+status: active
 description: A graph to traverse ResearchStudy, ResearchSubject, Patient, Specimen,
   and DocumentReference.
-id: research-study-graph
-link:
-- params: identifier=TCGA-KIRC
-  sourceId: ROOT
-  targetId: ResearchStudy
-- params: _has:ResearchSubject:subject:study={path}&_revinclude=Group:member&_count=1000&_total=accurate
-  path: ResearchStudy.id
-  sourceId: ResearchStudy
-  targetId: Patient
-- params: subject={path}&_revinclude=DocumentReference:subject&_revinclude=Group:member&_count=1000&_total=accurate
-  path: Patient.id
-  sourceId: Patient
-  targetId: Specimen
-- params: subject={path}&_count=1000&_total=accurate
-  path: Patient.id
-  sourceId: Patient
-  targetId: Observation
-- params: subject={path}&_include=Procedure:encounter&_count=1000&_total=accurate
-  path: Patient.id
-  sourceId: Patient
-  targetId: Procedure
-- params: subject={path}&_include=MedicationAdministration:subject&_count=1000&_total=accurate
-  path: Patient.id
-  sourceId: Patient
-  targetId: MedicationAdministration
-- params: member={path}&_count=1000&_total=accurate
-  path: Specimen.id
-  sourceId: Specimen
-  targetId: Group
-- params: subject={path}&_count=1000&_total=accurate
-  path: Group.id
-  sourceId: Group
-  targetId: DocumentReference
-name: ResearchStudyGraph
 node:
 - nodeId: ROOT
   type: ResearchStudy
@@ -45,5 +16,39 @@ node:
   type: Group
 - nodeId: DocumentReference
   type: DocumentReference
-resourceType: GraphDefinition
-status: active
+link:
+- sourceId: ROOT
+  params: identifier=TCGA-KIRC
+  targetId: ResearchStudy
+- sourceId: ResearchStudy
+  params: _has:ResearchSubject:subject:study={path}&_revinclude=Group:member&_revinclude=Condition:subject&_count=1000&_total=accurate
+  path: ResearchStudy.id
+  targetId: Patient
+- sourceId: Patient
+  params: subject={path}&_revinclude=DocumentReference:subject&_revinclude=Group:member&_count=1000&_total=accurate
+  path: Patient.id
+  targetId: Specimen
+- sourceId: Patient
+  params: subject={path}&_count=1000&_total=accurate
+  path: Patient.id
+  targetId: ImagingStudy
+- sourceId: Patient
+  params: subject={path}&_count=1000&_total=accurate
+  path: Patient.id
+  targetId: Observation
+- sourceId: Patient
+  params: subject={path}&_include=Procedure:encounter&_count=1000&_total=accurate
+  path: Patient.id
+  targetId: Procedure
+- sourceId: Patient
+  params: subject={path}&_include=MedicationAdministration:medication&_count=1000&_total=accurate
+  path: Patient.id
+  targetId: MedicationAdministration
+- sourceId: Specimen
+  params: member={path}&_count=1000&_total=accurate
+  path: Specimen.id
+  targetId: Group
+- sourceId: Group
+  params: subject={path}&_count=1000&_total=accurate
+  path: Group.id
+  targetId: DocumentReference
