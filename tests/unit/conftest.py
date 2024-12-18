@@ -45,9 +45,9 @@ def mock_fhir_server(httpx_mock: HTTPXMock) -> Generator[HTTPXMock, Any, Any]:
                     "resourceType": "Bundle",
                     "type": "searchset",
                     "entry": [
-                        {"resource": {"resourceType": "Specimen", "id": "1", "subject": {"reference": "Patient/1"}}},
-                        {"resource": {"resourceType": "Specimen", "id": "2", "subject": {"reference": "Patient/2"}}},
-                        {"resource": {"resourceType": "Specimen", "id": "3", "subject": {"reference": "Patient/3"}}},
+                        {"resource": {"resourceType": "Specimen", "id": "S1", "subject": {"reference": "Patient/1"}}},
+                        {"resource": {"resourceType": "Specimen", "id": "S2", "subject": {"reference": "Patient/2"}}},
+                        {"resource": {"resourceType": "Specimen", "id": "S3", "subject": {"reference": "Patient/3"}}},
                     ],
                 },
             )

@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import sys
+import pandas as pd
 
 import click
 from click_default_group import DefaultGroup
@@ -10,6 +11,7 @@ from fhir.resources.graphdefinition import GraphDefinition
 from halo import Halo
 
 from fhir_query import GraphDefinitionRunner, setup_logging
+from fhir_query.dataframer import Dataframer
 from fhir_query.visualizer import visualize_aggregation
 
 
@@ -117,6 +119,24 @@ def summarize(db_path: str) -> None:
     try:
         db = ResourceDB(db_path=db_path)
         yaml.dump(json.loads(json.dumps(db.aggregate())), sys.stdout, default_flow_style=False)
+
+    except Exception as e:
+        logging.error(f"Error: {e}", exc_info=True)
+        click.echo(f"Error: {e}", file=sys.stderr)
+        # raise e
+
+
+@cli.command(name="dataframe")
+@click.option("--db-path", default="/tmp/fhir-graph.sqlite", help="path to sqlite db")
+@click.option("--output-path", default="/tmp/fhir-graph.tsv", help="path output tsv")
+def dataframe(db_path: str, output_path: str) -> None:
+    """Create dataframes"""
+
+    try:
+        db = Dataframer(db_path=db_path)
+        df = pd.DataFrame(db.flattened_specimens())
+        df.to_csv(output_path, index=False)
+        click.secho(f"Saved {output_path}", file=sys.stderr)
 
     except Exception as e:
         logging.error(f"Error: {e}", exc_info=True)

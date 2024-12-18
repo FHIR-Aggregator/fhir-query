@@ -6,6 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from fhir_query.cli import main
+from fhir_query.dataframer import Dataframer
 from fhir_query.visualizer import visualize_aggregation
 
 
@@ -56,9 +57,8 @@ def test_runner(tmp_path: str) -> None:
     assert pathlib.Path(f"{tmp_path}/fhir-query.log").exists()
 
     # test the database
-    from fhir_query import ResourceDB
 
-    db = ResourceDB(f"{tmp_path}/fhir-query.sqlite")
+    db = Dataframer(f"{tmp_path}/fhir-query.sqlite")
     assert db.count_resource_types() == {"Patient": 3, "Specimen": 3}
 
     aggregated = db.aggregate()
@@ -71,3 +71,10 @@ def test_runner(tmp_path: str) -> None:
     assert pathlib.Path(f"{tmp_path}/fhir-query.html").exists()
     # to see the visualization, cp to tmp
     # shutil.copy(f"{tmp_path}/fhir-query.html", "/tmp/fhir-query.html")
+
+    count = 0
+    for _ in db.flattened_specimens():
+        count += 1
+        print(_)
+        assert "patient_id" in _
+    assert count == 3, "Expected 3 flattened specimens"
