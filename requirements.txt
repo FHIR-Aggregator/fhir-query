@@ -6,3 +6,6 @@ httpx
 
 fhir.resources==8.0.0b4
 dotty-dict
+nested_lookup
+pyvis
+click_default_group
