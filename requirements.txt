@@ -11,3 +11,6 @@ pyvis
 click_default_group
 inflection
 pandas
+
+# dtale see setup.py for extras
+
