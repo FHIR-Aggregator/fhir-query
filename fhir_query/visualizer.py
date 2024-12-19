@@ -30,8 +30,8 @@ def visualize_aggregation(aggregation: dict, output_path: str) -> None:
     """Visualize the aggregation."""
     # Load it into a pyvis
     net = _load(_container(), aggregation)
-    net.save_graph(str(output_path))
     net.show_buttons(filter_=["physics"])
+    net.save_graph(str(output_path))
 
 
 def create_network_graph(db_path: str, output_path: str) -> None:
