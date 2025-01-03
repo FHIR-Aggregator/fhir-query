@@ -82,8 +82,7 @@ To use the `fq` command, you need to provide the necessary options. Below is an 
 ```sh
 fq --fhir-base-url <FHIR_BASE_URL> \
    --graph-definition-id <GRAPH_DEFINITION_ID> \
-   --start-resource-type <START_RESOURCE_TYPE> \
-   --start-resource-id <START_RESOURCE_ID> \
+   --path </Resource?params> \
    [--graph-definition-file-path <GRAPH_DEFINITION_FILE_PATH>] \
    [--db_path <DB_PATH>] \
    [--debug]

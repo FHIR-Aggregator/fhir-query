@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 import sys
+from collections import defaultdict
+
 import pandas as pd
 
 import click
@@ -10,7 +12,7 @@ import yaml
 from fhir.resources.graphdefinition import GraphDefinition
 from halo import Halo
 
-from fhir_query import GraphDefinitionRunner, setup_logging
+from fhir_query import GraphDefinitionRunner, setup_logging, VocabularyRunner
 from fhir_query.dataframer import Dataframer
 from fhir_query.visualizer import visualize_aggregation
 
@@ -25,8 +27,7 @@ def cli():
 @click.option("--fhir-base-url", required=True, help="Base URL of the FHIR server.")
 @click.option("--graph-definition-id", help="ID of the GraphDefinition.")
 @click.option("--graph-definition-file-path", help="Path to the GraphDefinition JSON file.")
-@click.option("--start-resource-type", required=True, help="ResourceType to start traversal.")
-@click.option("--start-resource-id", required=True, help="ID of the starting resource.")
+@click.option("--path", required=False, default=None, help="Query to start traversal.")
 @click.option("--db-path", default="/tmp/fhir-graph.sqlite", help="path to of sqlite db")
 @click.option(
     "--dry-run",
@@ -40,8 +41,7 @@ def main(
     fhir_base_url: str,
     graph_definition_id: str,
     graph_definition_file_path: str,
-    start_resource_type: str,
-    start_resource_id: str,
+    path: str,
     debug: bool,
     db_path: str,
     dry_run: bool,
@@ -79,7 +79,7 @@ def main(
         spinner = Halo(text=f"Running {_.id} traversal", spinner="dots", stream=sys.stderr)
         spinner.start()
         try:
-            await runner.run(graph_definition, start_resource_type, start_resource_id, spinner)
+            await runner.run(graph_definition, path, spinner)
         finally:
             spinner.stop()
         click.echo(f"Aggregated Results: {runner.count_resource_types()}", file=sys.stderr)
@@ -87,6 +87,42 @@ def main(
 
     try:
         asyncio.run(run_runner())
+    except Exception as e:
+        logging.error(f"Error: {e}", exc_info=True)
+        click.echo(f"Error: {e}", file=sys.stderr)
+        if debug:
+            raise e
+
+
+@cli.command()
+@click.option("--fhir-base-url", required=True, help="Base URL of the FHIR server.")
+@click.option("--debug", is_flag=True, help="Enable debug mode.")
+@click.option("--log-file", default="app.log", help="Path to the log file.")
+def vocabularies(
+    fhir_base_url: str,
+    debug: bool,
+    log_file: str,
+) -> None:
+    """Collect vocabularies (CodeableConcepts) from key resources."""
+
+    setup_logging(debug, log_file)
+
+    if fhir_base_url.endswith("/"):
+        fhir_base_url = fhir_base_url[:-1]
+
+    async def collect_vocabularies(_runner: VocabularyRunner, _spinner: Halo) -> list:
+        _counts = await _runner.collect(
+            resource_types=["Observation", "Condition", "Procedure", "Medication", "Specimen", "Encounter", "DocumentReference"],
+            spinner=_spinner,
+        )  #
+        return _counts
+
+    try:
+        with Halo(text="Collecting vocabularies", spinner="dots", stream=sys.stderr) as spinner:
+            runner = VocabularyRunner(fhir_base_url)
+            counts = asyncio.run(collect_vocabularies(runner, spinner))
+            yaml_results = yaml.dump(counts, default_flow_style=False)
+        print(yaml_results)
     except Exception as e:
         logging.error(f"Error: {e}", exc_info=True)
         click.echo(f"Error: {e}", file=sys.stderr)

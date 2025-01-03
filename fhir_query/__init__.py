@@ -1,8 +1,10 @@
 # Initialize the fhir_query package
 import asyncio
+import concurrent
 import json
 import logging
 import sqlite3
+from urllib.parse import urlparse
 
 from nested_lookup import nested_lookup
 import tempfile
@@ -12,6 +14,8 @@ from typing import Any, Optional, Callable
 import httpx
 from dotty_dict import dotty
 from halo import Halo
+
+UNKNOWN_CATEGORY = {"coding": [{"system": "http://snomed.info/sct", "code": "261665006", "display": "Unknown"}]}
 
 
 def setup_logging(debug: bool, log_file: str) -> None:
@@ -220,7 +224,7 @@ class GraphDefinitionRunner(ResourceDB):
 
     async def execute_query(self, query_url: str) -> list[dict[str, Any]]:
         """
-        Executes a FHIR query for a given URL.
+        Executes a FHIR query for a given URL, returns all pages as a list of resources.
 
         Args:
             query_url (str): Fully constructed query URL.
@@ -234,6 +238,7 @@ class GraphDefinitionRunner(ResourceDB):
         while retry < max_retry:
             async with httpx.AsyncClient() as client:
                 try:
+                    # TODO - if debug, log the query_url
                     response = await client.get(query_url)
                     response.raise_for_status()
                     query_result = response.json()
@@ -302,13 +307,20 @@ class GraphDefinitionRunner(ResourceDB):
                             # since path can point to anywhere in the resource, we need the full resource
                             parent = dotty({_["resourceType"]: _})
                             assert path, f"Path is required for {link}"
+
+                            #  assert path in parent, f"Path {path} not found in {parent}"
+                            if path not in parent:
+                                continue
+
                             _path = parent[path]
                             if path.endswith(".id"):
                                 _path = source_id + "/" + _path
                             current_path.add(_path)
-                assert (
-                    current_path
-                ), f"Could not find any resources for {source_id} link: {link}\nparent_resources: {parent_resources}\n visited: {visited}"
+                if not current_path:
+                    continue
+                    # assert (
+                    #     current_path
+                    # ), f"Could not find any resources for {source_id} link: {link}"
 
                 if spinner:
                     spinner.succeed()
@@ -361,8 +373,7 @@ class GraphDefinitionRunner(ResourceDB):
     async def run(
         self,
         graph_definition: dict[str, Any],
-        start_resource_type: str,
-        start_resource_id: str,
+        path: str,
         spinner: Halo,
     ) -> None:
         """
@@ -370,15 +381,22 @@ class GraphDefinitionRunner(ResourceDB):
 
         Args:
             graph_definition (dict): The GraphDefinition resource.
-            start_resource_type (str): ID of the starting node in the GraphDefinition.
-            start_resource_id (str): ID of the starting resource.
+            path (str): Path to query the FHIR server and pass to the GraphDefinition.
             spinner (Halo): Spinner object to show progress.
 
         Returns:
             dict: Aggregated results of all traversed resources.
         """
         visited: set[tuple[Any, Any, Any]] = set()
-        parent_resources = [{"resourceType": start_resource_type, "id": start_resource_id}]
+
+        if path:
+            url = self.fhir_base_url + path
+            parent_resources = await self.execute_query(url)
+        else:
+            parent_resources = []
+
+        start_resource_type = graph_definition["link"][0]["sourceId"]
+
         return await self.process_links(
             parent_resources=parent_resources,
             parent_target_id=start_resource_type,
@@ -386,3 +404,76 @@ class GraphDefinitionRunner(ResourceDB):
             visited=visited,
             spinner=spinner,
         )
+
+
+def tree() -> defaultdict:
+    """A recursive defaultdict."""
+    return defaultdict(tree)
+
+
+class VocabularyRunner:
+    def __init__(self, fhir_base_url: str):
+        """
+        Initialize the VocabularyRunner instance.
+        :param fhir_base_url: Base URL of the FHIR server.
+        """
+        self.fhir_base_url = fhir_base_url
+
+    async def fetch_resource(self, resource_type: str, spinner: Halo = None) -> dict[str, dict[Any, Any]]:
+        """
+        Fetch resources of a given type from the FHIR server.
+        :param spinner: A Halo spinner object to show progress.
+        :param resource_type: The type of resource to fetch.
+        :return: A list of resources.
+        """
+        counts: dict = {resource_type: {}}
+        category_counts = counts[resource_type]
+        # A client with a 60s timeout for connecting, and a 10s timeout elsewhere.
+        timeout = httpx.Timeout(10.0, connect=60.0)
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            page_count = 1
+            url = f"{self.fhir_base_url}/{resource_type}?_count=1000&_total=accurate&_elements=category,code,type"
+            while url:
+                if spinner:
+                    spinner.text = f"Fetching {resource_type} page {page_count}"
+                response = await client.get(url)
+                response.raise_for_status()
+                page_count += 1
+                data = response.json()
+                for entry in data.get("entry", []):
+                    resource = entry["resource"]
+                    # get the code, if not there, get the type
+                    code = resource.get("code", resource.get("type", None))
+                    if not code:
+                        code = UNKNOWN_CATEGORY
+                    for category in resource.get("category", [UNKNOWN_CATEGORY]):
+                        for category_coding in category.get("coding", []):
+                            assert "display" in category_coding, f"No 'display' property in coding: {category_coding}"
+                            if category_coding["display"] not in category_counts:
+                                category_counts[category_coding["display"]] = {}
+
+                            code_counts = category_counts[category_coding["display"]]
+                            for code_coding in code.get("coding", []):
+                                assert "display" in code_coding, f"No 'display' property in coding: {code_coding}"
+                                if code_coding["display"] not in code_counts:
+                                    code_counts[code_coding["display"]] = 0
+                                code_counts[code_coding["display"]] += 1
+                next_link = next((link["url"] for link in data.get("link", []) if link["relation"] == "next"), None)
+                if next_link:
+                    assert "write-fhir" not in next_link, f"Found write-fhir in from {url} next link: {next_link}"
+                url = next_link
+        return counts
+
+    async def collect(self, resource_types: list[str], spinner: Halo = None) -> list:
+        """
+        Collect vocabularies from the specified resource types.
+        :param spinner: A Halo spinner object to show progress.
+        :param resource_types: A list of resource types to collect vocabularies from.
+        """
+        tasks = []
+
+        for resource_type in resource_types:
+            tasks.append(asyncio.create_task(self.fetch_resource(resource_type, spinner)))
+
+        results = await asyncio.gather(*tasks)
+        return results

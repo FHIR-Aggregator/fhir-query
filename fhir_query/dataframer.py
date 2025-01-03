@@ -460,7 +460,7 @@ class Dataframer(ResourceDB):
             resource = json.loads(raw_resource)
 
             # determine which how to process the field
-            if reference_field == "focus":
+            if reference_field == "focus" and "focus" in resource:
                 # add the resource (eg observation) for each focus reference to the dict
                 for i in range(len(resource["focus"])):
                     reference_key = get_nested_value(resource, [reference_field, i, "reference"])

@@ -34,14 +34,12 @@ def test_runner(tmp_path: str) -> None:
         [
             "--fhir-base-url",
             "http://testserver",
-            "--start-resource-type",
-            "ResearchStudy",
-            "--start-resource-id",
-            "123",
+            "--path",
+            "/ResearchStudy?_id=123",
             "--db-path",
             f"{tmp_path}/fhir-query.sqlite",
             "--graph-definition-file-path",
-            "tests/fixtures/GraphDefinition.yaml",
+            "tests/fixtures/ResearchStudyGraph.yaml",
             "--log-file",
             f"{tmp_path}/fhir-query.log",
             "--debug",
@@ -59,10 +57,41 @@ def test_runner(tmp_path: str) -> None:
     # test the database
 
     db = Dataframer(f"{tmp_path}/fhir-query.sqlite")
-    assert db.count_resource_types() == {"Patient": 3, "Specimen": 3}
+    count_resource_types = db.count_resource_types()
+    print(count_resource_types)
+    assert count_resource_types == {
+        "Condition": 1,
+        "DocumentReference": 2,
+        "Group": 1,
+        "ImagingStudy": 1,
+        "MedicationAdministration": 1,
+        "Observation": 1,
+        "Patient": 3,
+        "Procedure": 1,
+        "ResearchStudy": 1,
+        "ResearchSubject": 1,
+        "ServiceRequest": 1,
+        "Specimen": 3,
+    }
 
     aggregated = db.aggregate()
-    assert sorted(aggregated.keys()) == ["Patient", "Specimen"]
+    aggregated_keys = sorted(aggregated.keys())
+    print(aggregated_keys)
+    assert aggregated_keys == [
+        "Condition",
+        "DocumentReference",
+        "Group",
+        "ImagingStudy",
+        "MedicationAdministration",
+        "Observation",
+        "Patient",
+        "Procedure",
+        "ResearchStudy",
+        "ResearchSubject",
+        "ServiceRequest",
+        "Specimen",
+    ]
+
     assert aggregated["Patient"]["count"] == 3
     assert aggregated["Specimen"]["count"] == 3
     assert aggregated["Specimen"]["references"]["Patient"]["count"] == 3

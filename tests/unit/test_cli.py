@@ -22,8 +22,7 @@ def test_help_option() -> None:
     assert "--fhir-base-url" in output
     assert "--graph-definition-id" in output
     assert "--graph-definition-file-path" in output
-    assert "--start-resource-type" in output
-    assert "--start-resource-id" in output
+    assert "--path" in output
     assert "--db-path" in output
     assert "--dry-run" in output
     assert "--debug" in output
