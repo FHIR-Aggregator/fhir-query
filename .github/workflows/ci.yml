@@ -1,0 +1,30 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install setuptools wheel black mypy pytest pytest-cov pytest_httpx
+          pip install .
+
+      - name: Run Black
+        run: black --check --verbose fhir_query/ tests/
+
+      - name: Run Mypy
+        run: mypy --ignore-missing-imports  fhir_query/ tests/
+
+      - name: Run Pytest
+        run: pytest
