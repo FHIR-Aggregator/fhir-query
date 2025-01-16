@@ -189,6 +189,17 @@ def mock_fhir_server(httpx_mock: HTTPXMock) -> Generator[HTTPXMock, Any, Any]:
                 },
             )
 
+        if request.url.path == "/Medication":
+            return Response(
+                200,
+                json={
+                    "resourceType": "Bundle",
+                    "type": "searchset",
+                    "entry": [
+                        {"resource": {"resourceType": "Medication", "id": "M1"}},
+                    ],
+                },
+            )
         # unexpected request
         print(request.url, str(request.url.params))
         assert False, f"Unexpected url:{request.url} path:{request.url.path}, params:{str(request.url.params)}"
