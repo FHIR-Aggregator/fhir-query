@@ -191,7 +191,7 @@ class GraphDefinitionRunner(ResourceDB):
     https://www.devdays.com/wp-content/uploads/2021/12/Rene-Spronk-GraphDefinition-_-DevDays-2019-Amsterdam-1.pdf
     """
 
-    def __init__(self, fhir_base_url: str, db_path: Optional[str] = None):
+    def __init__(self, fhir_base_url: str, db_path: Optional[str] = None, debug: Optional[bool] = False):
         """
         Initializes the GraphDefinitionRunner.
 
@@ -205,6 +205,7 @@ class GraphDefinitionRunner(ResourceDB):
         super().__init__(db_path)
         self.fhir_base_url = fhir_base_url
         self.max_requests = 10
+        self.debug = debug
 
     async def fetch_graph_definition(self, graph_definition_id: str) -> Any:
         """
@@ -238,8 +239,9 @@ class GraphDefinitionRunner(ResourceDB):
         while retry < max_retry:
             async with httpx.AsyncClient() as client:
                 try:
-                    # TODO - if debug, log the query_url
-                    response = await client.get(query_url)
+                    if self.debug:
+                        logging.info(f"Querying: {query_url}")
+                    response = await client.get(query_url, timeout=300)
                     response.raise_for_status()
                     query_result = response.json()
                     resources = []
@@ -316,11 +318,11 @@ class GraphDefinitionRunner(ResourceDB):
                             if path.endswith(".id"):
                                 _path = source_id + "/" + _path
                             current_path.add(_path)
-                if not current_path:
-                    continue
-                    # assert (
-                    #     current_path
-                    # ), f"Could not find any resources for {source_id} link: {link}"
+                # if not current_path:
+                #     continue
+                #     # assert (
+                #     #     current_path
+                #     # ), f"Could not find any resources for {source_id} link: {link}"
 
                 if spinner:
                     spinner.succeed()

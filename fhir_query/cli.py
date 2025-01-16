@@ -57,7 +57,7 @@ def main(
     if not graph_definition_id and not graph_definition_file_path:
         raise click.UsageError("You must provide either --graph-definition-id or --graph-definition-file-path.")
 
-    runner = GraphDefinitionRunner(fhir_base_url, db_path)
+    runner = GraphDefinitionRunner(fhir_base_url, db_path, debug)
 
     async def run_runner() -> None:
         if graph_definition_file_path:
