@@ -6,11 +6,13 @@ httpx
 
 fhir.resources==8.0.0b4
 dotty-dict
-nested_lookup
 pyvis
 click_default_group
 inflection
 pandas
+
+# nested_lookup
+# glom
 
 # dtale see setup.py for extras
 
