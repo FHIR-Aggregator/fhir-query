@@ -334,11 +334,14 @@ class GraphDefinitionRunner(ResourceDB):
                                 _path = _path.split("/")[-1]
 
                             current_path.add(_path)
-                # if not current_path:
-                #     continue
-                #     # assert (
-                #     #     current_path
-                #     # ), f"Could not find any resources for {source_id} link: {link}"
+                if not current_path:
+                    if spinner:
+                        spinner.fail(f"Could not find any resources for {source_id}->{target_id} link: {link}")
+                    continue
+
+                    # assert (
+                    #     current_path
+                    # ), f"Could not find any resources for {source_id} link: {link}"
 
                 if spinner:
                     spinner.succeed()
@@ -419,6 +422,10 @@ class GraphDefinitionRunner(ResourceDB):
                 spinner.clear()
         else:
             parent_resources = []
+
+        if len(parent_resources) == 0:
+            if spinner:
+                spinner.fail("No resources found")
 
         start_resource_type = graph_definition["link"][0]["sourceId"]
 
