@@ -523,9 +523,13 @@ class Dataframer(ResourceDB):
         cursor.execute("SELECT * FROM resources where resource_type = ?", (resource_type,))
         for _, _, _, resource in cursor.fetchall():
             specimen = json.loads(resource)
-            yield self.flattened_specimen(specimen, observations_by_focus_id, service_requests_by_specimen_id, document_references_by_based_on_id)
+            yield self.flattened_specimen(
+                specimen, observations_by_focus_id, service_requests_by_specimen_id, document_references_by_based_on_id
+            )
 
-    def flattened_specimen(self, specimen: dict, observation_by_id: dict, service_requests_by_specimen_id, document_references_by_based_on_id) -> dict:
+    def flattened_specimen(
+        self, specimen: dict, observation_by_id: dict, service_requests_by_specimen_id, document_references_by_based_on_id
+    ) -> dict:
         """Return the specimen with everything resolved."""
 
         # create simple specimen dict
