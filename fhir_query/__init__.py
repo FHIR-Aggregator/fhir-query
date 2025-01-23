@@ -351,7 +351,7 @@ class GraphDefinitionRunner(ResourceDB):
 
                 # handle current path <= chunk size
                 _current_path: list[Any] = list(current_path)
-                chunk_size = 50
+                chunk_size = 40
                 chunks = [_current_path]
                 tasks = []
                 if len(_current_path) > chunk_size:
