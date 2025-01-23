@@ -124,6 +124,10 @@ def normalize_value(resource_dict: dict) -> tuple[Optional[str], Optional[str]]:
     elif "valueCount" in resource_dict:
         value_normalized = resource_dict["valueCount"]["value"]
         value_source = "valueCount"
+    elif "valueReference" in resource_dict:
+        value_normalized = resource_dict["valueReference"]["reference"]
+        value_source = "valueReference"
+
     else:
         value_normalized, value_source = None, None
         # for debugging...
@@ -201,6 +205,8 @@ class SimplifiedFHIR(BaseModel):
             value_normalized, extension_key = normalize_value(extension)
             extension_key = extension["url"].split("/")[-1]
             extension_key = inflection.underscore(extension_key).removesuffix(".json").removeprefix("structure_definition_")  # type: ignore[arg-type]
+            if value_normalized is None:
+                pass
             assert value_normalized is not None, f"extension: {extension_key} = {value_normalized} {extension}"
             _extensions[extension_key] = value_normalized
 
@@ -209,6 +215,9 @@ class SimplifiedFHIR(BaseModel):
 
         if not resource:
             resource = self.resource
+
+        if "extension" not in resource.keys():
+            return _extensions
 
         for _ in resource.get("extension", [resource]):
             if "extension" not in _.keys():
@@ -436,12 +445,12 @@ class Dataframer(ResourceDB):
         return traverse(subject)
 
     def get_resources_by_reference(self, resource_type: str, reference_field: str, reference_type: str) -> dict[str, list]:
-        """given a set of rescode ources of type resource_type, map each unique reference in reference field of type reference_type to its associated resources
+        """given a set of rescode resources of type resource_type, map each unique reference in reference field of type reference_type to its associated resources
         ex: use all Observations with a Specimen focus, map Specimen IDs to its list of associated Observations and return the map
         """
 
         # ensure reference field is allowed
-        allowed_fields = ["focus", "subject"]
+        allowed_fields = ["focus", "subject", "specimen", "basedOn"]
         assert reference_field in allowed_fields, f"Field not implemented, choose between {allowed_fields}"
 
         cursor = self.connection.cursor()
@@ -463,6 +472,22 @@ class Dataframer(ResourceDB):
             if reference_field == "focus" and "focus" in resource:
                 # add the resource (eg observation) for each focus reference to the dict
                 for i in range(len(resource["focus"])):
+                    reference_key = get_nested_value(resource, [reference_field, i, "reference"])
+                    if reference_key is not None and reference_type in reference_key:
+                        reference_id = reference_key.split("/")[-1]
+                        resource_by_reference_id[reference_id].append(resource)
+
+            if reference_field == "specimen" and "specimen" in resource:
+                # add the resource (eg observation) for each specimen reference to the dict
+                for i in range(len(resource["specimen"])):
+                    reference_key = get_nested_value(resource, [reference_field, i, "reference"])
+                    if reference_key is not None and reference_type in reference_key:
+                        reference_id = reference_key.split("/")[-1]
+                        resource_by_reference_id[reference_id].append(resource)
+
+            if reference_field == "basedOn" and "basedOn" in resource:
+                # add the resource (eg observation) for each basedOn reference to the dict
+                for i in range(len(resource["basedOn"])):
                     reference_key = get_nested_value(resource, [reference_field, i, "reference"])
                     if reference_key is not None and reference_type in reference_key:
                         reference_id = reference_key.split("/")[-1]
@@ -491,18 +516,20 @@ class Dataframer(ResourceDB):
 
         # get a dict mapping focus ID to its associated observations
         observations_by_focus_id = self.get_observations_by_focus(resource_type)
+        service_requests_by_specimen_id = self.get_resources_by_reference("ServiceRequest", "specimen", "Specimen")
+        document_references_by_based_on_id = self.get_resources_by_reference("DocumentReference", "basedOn", "ServiceRequest")
 
         # flatten each document reference
         cursor.execute("SELECT * FROM resources where resource_type = ?", (resource_type,))
         for _, _, _, resource in cursor.fetchall():
             specimen = json.loads(resource)
-            yield self.flattened_specimen(specimen, observations_by_focus_id)
+            yield self.flattened_specimen(specimen, observations_by_focus_id, service_requests_by_specimen_id, document_references_by_based_on_id)
 
-    def flattened_specimen(self, specimen: dict, observation_by_id: dict) -> dict:
+    def flattened_specimen(self, specimen: dict, observation_by_id: dict, service_requests_by_specimen_id, document_references_by_based_on_id) -> dict:
         """Return the specimen with everything resolved."""
 
         # create simple specimen dict
-        flat_specimen = SimplifiedResource.build(resource=specimen).simplified
+        flat_specimen = traverse(specimen)
 
         # extract its .subject and append its fields (including id)
         flat_specimen.update(self.get_subject(specimen))
@@ -510,10 +537,20 @@ class Dataframer(ResourceDB):
         # populate observation codes for each associated observation
         if specimen["id"] in observation_by_id:
             observations = observation_by_id[specimen["id"]]
-
             # TODO: assumes there are no duplicate column names in each observation
             for observation in observations:
                 flat_observation = SimplifiedResource.build(resource=observation).values
+                flat_observation = {f"observation_{k}": v for k, v in flat_observation.items()}
                 flat_specimen.update(flat_observation)
+
+        if specimen["id"] in service_requests_by_specimen_id:
+            service_requests = service_requests_by_specimen_id[specimen["id"]]
+            # TODO: assumes there are no duplicate column names in each observation
+            for service_request in service_requests:
+                flat_specimen.update(traverse(service_request))
+                if service_request["id"] in document_references_by_based_on_id:
+                    document_references = document_references_by_based_on_id[service_request["id"]]
+                    for document_reference in document_references:
+                        flat_specimen.update(traverse(document_reference))
 
         return flat_specimen
