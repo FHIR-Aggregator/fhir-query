@@ -84,6 +84,11 @@ link:
   sourceId: Patient
   targetId: MedicationAdministration
 
+- params: subject={path}
+  path: Patient.id
+  sourceId: Patient
+  targetId: Encounter
+
 # R5
 - params: _id={path}&_count=1000&_total=accurate
   path: MedicationAdministration.medication.reference.reference
