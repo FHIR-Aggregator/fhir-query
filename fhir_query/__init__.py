@@ -6,7 +6,6 @@ import logging
 import sqlite3
 from urllib.parse import urlparse
 
-from nested_lookup import nested_lookup
 import tempfile
 from collections import defaultdict
 from typing import Any, Optional, Callable
@@ -150,7 +149,7 @@ class ResourceDB:
         """
         self.connection.close()
 
-    def aggregate(self) -> dict:
+    def aggregate(self, ignored_edges: list[str] = []) -> dict:
         """Aggregate metadata counts resourceType(count)-count->resourceType(count)."""
 
         nested_dict: Callable[[], defaultdict[str, defaultdict]] = lambda: defaultdict(defaultdict)
@@ -160,21 +159,32 @@ class ResourceDB:
         summary = nested_dict()
 
         for resource_type in count_resource_types:
+
             resources = self.all_resources(resource_type)
+
             for _ in resources:
 
                 if "count" not in summary[resource_type]:
                     summary[resource_type]["count"] = 0
                 summary[resource_type]["count"] += 1
 
-                refs = nested_lookup("reference", _)
-                for ref in refs:
+                # refs = nested_lookup("reference", _)
+                refs = find_key_with_path(_, "reference", ignored_keys=ignored_edges)
+                for match in refs:
+                    path, ref = match.values()
+
                     # A codeable reference is an object with a codeable concept and a reference
                     if isinstance(ref, dict):
                         ref = ref["reference"]
                     ref_resource_type = ref.split("/")[0]
                     if "references" not in summary[resource_type]:
                         summary[resource_type]["references"] = nested_dict()
+
+                    # # only count references to resources that are not ResearchStudy
+                    # if ref_resource_type == 'ResearchStudy' and resource_type != 'ResearchSubject':
+                    #     continue
+                    # if set([resource_type, ref_resource_type]) == set(['Group', 'Patient']):
+                    #     pass
                     dst = summary[resource_type]["references"][ref_resource_type]
                     if "count" not in dst:
                         dst["count"] = 0
@@ -206,6 +216,7 @@ class GraphDefinitionRunner(ResourceDB):
         self.fhir_base_url = fhir_base_url
         self.max_requests = 10
         self.debug = debug
+        self.recurse_count = 0
 
     async def fetch_graph_definition(self, graph_definition_id: str) -> Any:
         """
@@ -240,7 +251,7 @@ class GraphDefinitionRunner(ResourceDB):
             async with httpx.AsyncClient() as client:
                 try:
                     if self.debug:
-                        logging.info(f"Querying: {query_url}")
+                        print(f"Querying: {query_url}")
                     response = await client.get(query_url, timeout=300)
                     response.raise_for_status()
                     query_result = response.json()
@@ -253,6 +264,8 @@ class GraphDefinitionRunner(ResourceDB):
                         for entry in await self.execute_query(next_link[0]["url"]):
                             resources.append(entry)
 
+                    if self.debug:
+                        print(f"Query result: {len(resources)}")
                     return resources
 
                 except httpx.ReadTimeout as e:
@@ -317,12 +330,18 @@ class GraphDefinitionRunner(ResourceDB):
                             _path = parent[path]
                             if path.endswith(".id"):
                                 _path = source_id + "/" + _path
+                            if "_id={path}" in params and "/" in _path:
+                                _path = _path.split("/")[-1]
+
                             current_path.add(_path)
-                # if not current_path:
-                #     continue
-                #     # assert (
-                #     #     current_path
-                #     # ), f"Could not find any resources for {source_id} link: {link}"
+                if not current_path:
+                    if spinner:
+                        spinner.fail(f"Could not find any resources for {source_id}->{target_id} link: {link}")
+                    continue
+
+                    # assert (
+                    #     current_path
+                    # ), f"Could not find any resources for {source_id} link: {link}"
 
                 if spinner:
                     spinner.succeed()
@@ -332,7 +351,7 @@ class GraphDefinitionRunner(ResourceDB):
 
                 # handle current path <= chunk size
                 _current_path: list[Any] = list(current_path)
-                chunk_size = 50
+                chunk_size = 40
                 chunks = [_current_path]
                 tasks = []
                 if len(_current_path) > chunk_size:
@@ -366,7 +385,8 @@ class GraphDefinitionRunner(ResourceDB):
                     spinner=spinner,
                 )
             else:
-                pass
+                if spinner:
+                    spinner.clear()
 
         # if spinner:
         #     spinner.succeed()
@@ -393,9 +413,19 @@ class GraphDefinitionRunner(ResourceDB):
 
         if path:
             url = self.fhir_base_url + path
+            if spinner:
+                spinner.start(text=f"Fetching {url}")
+            assert self.recurse_count == 0, "Should not call this twice"
+            self.recurse_count += 1
             parent_resources = await self.execute_query(url)
+            if spinner:
+                spinner.clear()
         else:
             parent_resources = []
+
+        if len(parent_resources) == 0:
+            if spinner:
+                spinner.fail("No resources found")
 
         start_resource_type = graph_definition["link"][0]["sourceId"]
 
@@ -479,3 +509,62 @@ class VocabularyRunner:
 
         results = await asyncio.gather(*tasks)
         return results
+
+
+def find_key_with_path(data, key_to_find, ignored_keys=[]):
+    """
+    Traverse the dictionary and find all occurrences of a given key.
+    Returns a list of dictionaries containing the path and value for each match.
+    Paths containing keys in the ignored_keys list are skipped.
+
+    :param data: The input dictionary or list to search.
+    :param key_to_find: The key to look for in the data structure.
+    :param ignored_keys: A list of keys to ignore during traversal.
+    :return: A list of dictionaries with 'path' and 'value' for each match.
+    """
+    results = []
+
+    def recursive_search(d, current_path=[]):
+        if isinstance(d, dict):
+            for key, value in d.items():
+                new_path = current_path + [key]
+
+                if key in ignored_keys:
+                    continue  # Skip paths containing ignored keys
+
+                if key == key_to_find:
+                    found_ignored_key_in_extension = False
+                    if "extension" in new_path:
+                        extension_url = get_value_from_path(data, new_path[:-2] + ["url"])
+                        if extension_url:
+                            for k in ignored_keys:
+                                if k in extension_url:
+                                    found_ignored_key_in_extension = True
+                                    break
+                    if found_ignored_key_in_extension:
+                        continue
+                    results.append({"path": new_path, "value": value})
+                recursive_search(value, new_path)
+        elif isinstance(d, list):
+            for index, item in enumerate(d):
+                new_path = current_path + [index]
+                recursive_search(item, new_path)
+
+    recursive_search(data)
+    return results
+
+
+def get_value_from_path(data, path):
+    """
+    Retrieve a value from a nested dictionary or list using a path array.
+
+    :param data: The nested dictionary or list to retrieve the value from.
+    :param path: A list representing the path to the desired value.
+    :return: The value at the specified path, or None if the path is invalid.
+    """
+    try:
+        for key in path:
+            data = data[key]
+        return data
+    except (KeyError, IndexError, TypeError):
+        return None

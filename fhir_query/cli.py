@@ -133,13 +133,16 @@ def vocabularies(
 @cli.command(name="visualize")
 @click.option("--db-path", default="/tmp/fhir-graph.sqlite", help="path to sqlite db")
 @click.option("--output-path", default="/tmp/fhir-graph.html", help="path output html")
-def visualize(db_path: str, output_path: str) -> None:
+@click.option(
+    "--ignored-edges", "-i", multiple=True, help="Edges to ignore in the visualization", default=["member", "part-of-study"]
+)
+def visualize(db_path: str, output_path: str, ignored_edges: list[str]) -> None:
     """Visualize the aggregation results."""
     from fhir_query import ResourceDB
 
     try:
         db = ResourceDB(db_path=db_path)
-        visualize_aggregation(db.aggregate(), output_path)
+        visualize_aggregation(db.aggregate(ignored_edges), output_path)
     except Exception as e:
         logging.error(f"Error: {e}", exc_info=True)
         click.echo(f"Error: {e}", file=sys.stderr)
