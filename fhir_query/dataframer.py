@@ -523,6 +523,7 @@ class Dataframer(ResourceDB):
         cursor.execute("SELECT * FROM resources where resource_type = ?", (resource_type,))
         for _, _, _, resource in cursor.fetchall():
             specimen = json.loads(resource)
+            print(specimen)
             yield self.flattened_specimen(
                 specimen, observations_by_focus_id, service_requests_by_specimen_id, document_references_by_based_on_id
             )
@@ -558,3 +559,39 @@ class Dataframer(ResourceDB):
                         flat_specimen.update(traverse(document_reference))
 
         return flat_specimen
+
+
+    @lru_cache(maxsize=None)
+    def flattened_patients(self) -> Generator[dict, None, None]:
+        """
+        Generator that yields flattened Patient records.
+        Each flattened Patient merges in fields from:
+            - Observations that reference the Patient via the focus field
+        """
+        resource_type = "Patient"
+        cursor = self.connection.cursor()
+
+        observations_by_focus = self.get_resources_by_reference("Observation", "focus", "Patient")
+
+        cursor.execute("SELECT * FROM resources WHERE resource_type = ?", (resource_type,))
+        for _, _, _, resource in cursor.fetchall():
+            patient = json.loads(resource)
+            yield self.flattened_patient(patient, observations_by_focus)
+
+
+    @staticmethod
+    def flattened_patient(patient: dict, observations_by_subject: dict) -> dict:
+        """Return the flattened Patient record with related Observations"""
+        flat_patient = traverse(patient)
+
+        if patient["id"] in observations_by_subject:
+            observations = observations_by_subject[patient["id"]]
+            for observation in observations:
+                flat_observation = SimplifiedResource.build(resource=observation).values
+                flat_observation = {f"observation_{k}": v for k, v in flat_observation.items()}
+                flat_patient.update(flat_observation)
+
+        return flat_patient
+
+
+
