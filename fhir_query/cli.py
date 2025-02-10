@@ -178,7 +178,7 @@ def summarize(db_path: str) -> None:
     help="Open the graph in a browser using the dtale package for interactive data exploration.",
 )
 @click.argument(
-    "data_type", required=True, type=click.Choice(["Specimen", "DocumentReference", "ResearchSubject"]), default="Specimen"
+    "data_type", required=True, type=click.Choice(["Specimen", "DocumentReference", "ResearchSubject", "Patient"]), default="Specimen"
 )
 def dataframe(db_path: str, output_path: str, launch_dtale: bool, data_type: str) -> None:
     """Create dataframes from the local db."""
