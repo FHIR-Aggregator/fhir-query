@@ -178,7 +178,10 @@ def summarize(db_path: str) -> None:
     help="Open the graph in a browser using the dtale package for interactive data exploration.",
 )
 @click.argument(
-    "data_type", required=True, type=click.Choice(["Specimen", "DocumentReference", "ResearchSubject", "Patient"]), default="Specimen"
+    "data_type",
+    required=True,
+    type=click.Choice(["Specimen", "DocumentReference", "ResearchSubject", "Patient"]),
+    default="Specimen",
 )
 def dataframe(db_path: str, output_path: str, launch_dtale: bool, data_type: str) -> None:
     """Create dataframes from the local db."""
@@ -190,7 +193,7 @@ def dataframe(db_path: str, output_path: str, launch_dtale: bool, data_type: str
 
         patient_df = None
         specimen_df = None
-        file_name  = None
+        file_name = None
         if data_type == "Specimen":
             specimen_df = pd.DataFrame(db.flattened_specimens())
         if data_type == "Patient":

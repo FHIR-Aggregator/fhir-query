@@ -560,7 +560,6 @@ class Dataframer(ResourceDB):
 
         return flat_specimen
 
-
     @lru_cache(maxsize=None)
     def flattened_patients(self) -> Generator[dict, None, None]:
         """
@@ -578,7 +577,6 @@ class Dataframer(ResourceDB):
             patient = json.loads(resource)
             yield self.flattened_patient(patient, observations_by_focus)
 
-
     @staticmethod
     def flattened_patient(patient: dict, observations_by_subject: dict) -> dict:
         """Return the flattened Patient record with related Observations"""
@@ -592,6 +590,3 @@ class Dataframer(ResourceDB):
                 flat_patient.update(flat_observation)
 
         return flat_patient
-
-
-
