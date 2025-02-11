@@ -3,10 +3,12 @@ import json
 import logging
 import sys
 from collections import defaultdict
+from typing import Any
 
 import pandas as pd
 
 import click
+import requests
 from click_default_group import DefaultGroup
 import yaml
 from fhir.resources.graphdefinition import GraphDefinition
@@ -15,6 +17,7 @@ from halo import Halo
 from fhir_query import GraphDefinitionRunner, setup_logging, VocabularyRunner
 from fhir_query.dataframer import Dataframer
 from fhir_query.visualizer import visualize_aggregation
+from fhir_query.vocabulary import vocabulary_simplifier
 
 
 @click.group(cls=DefaultGroup, default="main")
@@ -96,33 +99,49 @@ def main(
 
 @cli.command()
 @click.option("--fhir-base-url", required=True, help="Base URL of the FHIR server.")
+@click.option("--raw", is_flag=True, default=False, help="Do not create a dataframe. default=False")
+@click.option("--tsv", is_flag=True, default=True, help="Render dataframe as tsv. default=True")
 @click.option("--debug", is_flag=True, help="Enable debug mode.")
-@click.option("--log-file", default="app.log", help="Path to the log file.")
-def vocabularies(
+@click.option("--log-file", default="./fq.log", help='Path to the log file. default="./fq.log"')
+@click.argument("output_path", type=click.File("w"), required=False, default=sys.stdout)
+def vocabulary(
     fhir_base_url: str,
+    output_path: click.File,
     debug: bool,
     log_file: str,
+    raw: bool,
+    tsv: bool,
 ) -> None:
-    """Collect vocabularies (CodeableConcepts) from key resources."""
+    """Retrieve Vocabulary Observation and ResearchStudy resources from the FHIR server.
+    \b
+
+    OUTPUT_PATH: Path to the output file. If not provided, the output will be printed to stdout.
+    """
 
     setup_logging(debug, log_file)
 
     if fhir_base_url.endswith("/"):
         fhir_base_url = fhir_base_url[:-1]
 
-    async def collect_vocabularies(_runner: VocabularyRunner, _spinner: Halo) -> list:
-        _counts = await _runner.collect(
-            resource_types=["Observation", "Condition", "Procedure", "Medication", "Specimen", "Encounter", "DocumentReference"],
-            spinner=_spinner,
-        )  #
-        return _counts
+    output_stream: Any = output_path
 
     try:
         with Halo(text="Collecting vocabularies", spinner="dots", stream=sys.stderr) as spinner:
-            runner = VocabularyRunner(fhir_base_url)
-            counts = asyncio.run(collect_vocabularies(runner, spinner))
-            yaml_results = yaml.dump(counts, default_flow_style=False)
-        print(yaml_results)
+            query_url = f"{fhir_base_url}/Observation?code=vocabulary&_include=Observation:focus"
+            response = requests.get(query_url, timeout=300)
+            response.raise_for_status()
+            bundle = response.json()
+            results = bundle
+            if not raw:
+                results = vocabulary_simplifier(bundle)
+            if not tsv:
+                yaml_results = yaml.dump(results, default_flow_style=False, sort_keys=False)
+                print(yaml_results, file=output_stream)
+            else:
+                df = pd.DataFrame(results)
+                df.to_csv(output_stream, sep="\t", index=False)
+            spinner.succeed(f"Wrote {len(results)} vocabularies to {output_stream.name}")
+
     except Exception as e:
         logging.error(f"Error: {e}", exc_info=True)
         click.echo(f"Error: {e}", file=sys.stderr)
