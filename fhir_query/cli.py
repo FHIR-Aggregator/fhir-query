@@ -211,7 +211,7 @@ def dataframe(db_path: str, output_path: str, launch_dtale: bool, data_type: str
         # TODO - add more data types - including condition
         assert data_type in ["Specimen", "Patient"], f"Sorry {data_type} dataframe is not supported yet."
 
-        df = None
+        df: pd.DataFrame | None = None
         if data_type == "Specimen":
             df = pd.DataFrame(db.flattened_specimens())
         if data_type == "Patient":
@@ -222,11 +222,13 @@ def dataframe(db_path: str, output_path: str, launch_dtale: bool, data_type: str
             import dtale
 
             dtale.show(df, subprocess=False, open_browser=True, port=40000)
-        else:
+        elif df is not None:
             # export to csv
             file_name = output_path if output_path else f"{data_type}.csv"
             df.to_csv(file_name, index=False)
             click.secho(f"Saved {file_name}", file=sys.stderr)
+        else:
+            click.secho(f"No data found for {data_type}", file=sys.stderr)
 
     except Exception as e:
         logging.error(f"Error: {e}", exc_info=True)

@@ -293,11 +293,13 @@ class SimplifiedFHIR(BaseModel):
             return {}
 
         # update the key if code information is available
+
         if self.resource.get("code", {}).get("text", None):
             source = self.resource["code"]["text"]
         else:
             source = self.resource["code"]["coding"][0].get("display", self.resource["code"]["coding"][0].get("code"))
-
+        if not source:
+            source = "NA"
         source = inflection.underscore(inflection.parameterize(source))
         return {source: value}
 
