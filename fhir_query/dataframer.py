@@ -293,8 +293,14 @@ class SimplifiedFHIR(BaseModel):
             return {}
 
         # update the key if code information is available
+
         if self.resource.get("code", {}).get("text", None):
             source = self.resource["code"]["text"]
+        else:
+            source = self.resource["code"]["coding"][0].get("display", self.resource["code"]["coding"][0].get("code"))
+        if not source:
+            source = "NA"
+        source = inflection.underscore(inflection.parameterize(source))
         return {source: value}
 
 
@@ -329,7 +335,6 @@ class SimplifiedObservation(SimplifiedFHIR):
 
         # get top-level value in dict if it exists
         _values = super().values
-
         if len(_values) == 0:
             assert "component" in self.resource, "no component nor top-level value found"
 
@@ -343,28 +348,30 @@ class SimplifiedObservation(SimplifiedFHIR):
                         continue
                     _values[source] = value
 
-        # knowing there's now at least 1 item in _values
-        if "component" in self.resource:
-            # ensure no top-level value is not duplicating a component code value
-            # TODO: ensure this value_key corresponds to percent_tumor on some runs due to getting display
-            value_key = [k for k in _values][0]
-            assert (
-                value_key not in self.resource["component"]
-            ), """duplicate code value found, only specify the code value in the component, see Rule obs-7
-                https://build.fhir.org/observation.html#invs"""
-
-            # get component codes
+            # knowing there's now at least 1 item in _values
             if "component" in self.resource:
-                for component in self.resource["component"]:
-                    value, source = normalize_value(component)
-                    if component.get("code", {}).get("text", None):
-                        source = component["code"]["text"]
-                    if not value:
-                        continue
-                    _values[source] = value
+                # ensure no top-level value is not duplicating a component code value
+                # TODO: ensure this value_key corresponds to percent_tumor on some runs due to getting display
+                value_key = [k for k in _values][0]
+                assert (
+                    value_key not in self.resource["component"]
+                ), """duplicate code value found, only specify the code value in the component, see Rule obs-7
+                    https://build.fhir.org/observation.html#invs"""
+
+                # get component codes
+                if "component" in self.resource:
+                    for component in self.resource["component"]:
+                        value, source = normalize_value(component)
+                        if component.get("code", {}).get("text", None):
+                            source = component["code"]["text"]
+                        if not value:
+                            continue
+                        _values[source] = value
+
         if "code" in self.resource and "text" in self.resource["code"]:
             _values["observation_code"] = self.resource["code"]["text"]
 
+        assert not [_ for _ in _values.keys() if _.startswith("value")], f"key misnamed {_values}\n  {self.resource}"
         assert len(_values) > 0, f"no values found in Observation: {self.resource}"
 
         return _values
@@ -515,7 +522,7 @@ class Dataframer(ResourceDB):
         cursor = self.connection.cursor()
 
         # get a dict mapping focus ID to its associated observations
-        observations_by_focus_id = self.get_observations_by_focus(resource_type)
+        specimen_observations_by_focus_id = self.get_observations_by_focus(resource_type)
         service_requests_by_specimen_id = self.get_resources_by_reference("ServiceRequest", "specimen", "Specimen")
         document_references_by_based_on_id = self.get_resources_by_reference("DocumentReference", "basedOn", "ServiceRequest")
 
@@ -524,7 +531,7 @@ class Dataframer(ResourceDB):
         for _, _, _, resource in cursor.fetchall():
             specimen = json.loads(resource)
             yield self.flattened_specimen(
-                specimen, observations_by_focus_id, service_requests_by_specimen_id, document_references_by_based_on_id
+                specimen, specimen_observations_by_focus_id, service_requests_by_specimen_id, document_references_by_based_on_id
             )
 
     def flattened_specimen(
@@ -536,7 +543,17 @@ class Dataframer(ResourceDB):
         flat_specimen = traverse(specimen)
 
         # extract its .subject and append its fields (including id)
-        flat_specimen.update(self.get_subject(specimen))
+        subject = self.get_subject(specimen)
+        if "patient_id" in subject:
+            assert len(self.flattened_patients()) > 1, f"Length of flattened_patients is {len(self.flattened_patients())}"
+            _flattened_patient = next(
+                iter([_ for _ in self.flattened_patients() if _["patient_id"] == subject["patient_id"]]), None
+            )
+            if not _flattened_patient:
+                print(f"Patient not found {subject['patient_id']} {[_['patient_id'] for _ in self.flattened_patients()]}")
+            else:
+                subject = {f"patient_{k}".replace("patient_patient_", "patient_"): v for k, v in _flattened_patient.items()}
+        flat_specimen.update(subject)
 
         # populate observation codes for each associated observation
         if specimen["id"] in observation_by_id:
@@ -558,3 +575,35 @@ class Dataframer(ResourceDB):
                         flat_specimen.update(traverse(document_reference))
 
         return flat_specimen
+
+    @lru_cache(maxsize=None)
+    def flattened_patients(self) -> list[dict]:
+        """
+        Generator that yields flattened Patient records.
+        Each flattened Patient merges in fields from:
+            - Observations that reference the Patient via the focus field
+        """
+        resource_type = "Patient"
+        cursor = self.connection.cursor()
+
+        observations_by_focus = self.get_resources_by_reference("Observation", "focus", "Patient")
+        cursor.execute("SELECT * FROM resources WHERE resource_type = ?", (resource_type,))
+        _flattened_patients = []
+        for _, _, _, resource in cursor.fetchall():
+            patient = json.loads(resource)
+            _flattened_patients.append(self.flattened_patient(patient, observations_by_focus))
+        return _flattened_patients
+
+    @staticmethod
+    def flattened_patient(patient: dict, observations_by_subject: dict) -> dict:
+        """Return the flattened Patient record with related Observations"""
+        flat_patient = traverse(patient)
+
+        if patient["id"] in observations_by_subject:
+            observations = observations_by_subject[patient["id"]]
+            for observation in observations:
+                flat_observation = SimplifiedResource.build(resource=observation).values
+                flat_observation = {f"observation_{k}": v for k, v in flat_observation.items()}
+                flat_patient.update(flat_observation)
+
+        return flat_patient
