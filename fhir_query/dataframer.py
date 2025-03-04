@@ -180,7 +180,7 @@ def traverse(resource):
 
 
 class SimplifiedFHIR(BaseModel):
-    """All simplifiers should inherit from this class."""
+    """All Simplifiers should inherit from this class."""
 
     warnings: list[str] = []
     """A list of warnings generated during the simplification process."""
@@ -287,7 +287,7 @@ class SimplifiedFHIR(BaseModel):
     @property
     def values(self) -> dict:
         """Return a dictionary of source:value."""
-        # FIXME: values that are scalars are processed twice: once in scalars once here in values (eg valueString)
+        # FIXME: values that are scalars are processed twice: once in scalars once here in values (e.g. valueString)
         value, source = normalize_value(self.resource)
         if not value:
             return {}
@@ -402,9 +402,9 @@ class SimplifiedCondition(SimplifiedFHIR):
 
         # get field name
         codings_dict = super().codings
-        if "category" in codings_dict:
-            key = codings_dict["category"]
-            del codings_dict["category"]
+        if "cate.g.ory" in codings_dict:
+            key = codings_dict["cate.g.ory"]
+            del codings_dict["cate.g.ory"]
         else:
             key = "code"
 
@@ -452,7 +452,7 @@ class Dataframer(ResourceDB):
         return traverse(subject)
 
     def get_resources_by_reference(self, resource_type: str, reference_field: str, reference_type: str) -> dict[str, list]:
-        """given a set of rescode resources of type resource_type, map each unique reference in reference field of type reference_type to its associated resources
+        """Given a set of resources of type resource_type, map each unique reference in reference field of type reference_type to its associated resources
         ex: use all Observations with a Specimen focus, map Specimen IDs to its list of associated Observations and return the map
         """
 
@@ -477,15 +477,15 @@ class Dataframer(ResourceDB):
 
             # determine which how to process the field
             if reference_field == "focus" and "focus" in resource:
-                # add the resource (eg observation) for each focus reference to the dict
+                # add the resource (e.g. observation) for each focus reference to the dict
                 for i in range(len(resource["focus"])):
-                    reference_key = get_nested_value(resource, [reference_field, i, "reference"])
+                    reference_key: str = get_nested_value(resource, [reference_field, i, "reference"])
                     if reference_key is not None and reference_type in reference_key:
                         reference_id = reference_key.split("/")[-1]
                         resource_by_reference_id[reference_id].append(resource)
 
             if reference_field == "specimen" and "specimen" in resource:
-                # add the resource (eg observation) for each specimen reference to the dict
+                # add the resource (e.g. observation) for each specimen reference to the dict
                 for i in range(len(resource["specimen"])):
                     reference_key = get_nested_value(resource, [reference_field, i, "reference"])
                     if reference_key is not None and reference_type in reference_key:
@@ -493,7 +493,7 @@ class Dataframer(ResourceDB):
                         resource_by_reference_id[reference_id].append(resource)
 
             if reference_field == "basedOn" and "basedOn" in resource:
-                # add the resource (eg observation) for each basedOn reference to the dict
+                # add the resource (e.g. observation) for each basedOn reference to the dict
                 for i in range(len(resource["basedOn"])):
                     reference_key = get_nested_value(resource, [reference_field, i, "reference"])
                     if reference_key is not None and reference_type in reference_key:
@@ -501,7 +501,7 @@ class Dataframer(ResourceDB):
                         resource_by_reference_id[reference_id].append(resource)
 
             elif reference_field == "subject":
-                # add the resource (eg observation) to the dict
+                # add the resource (e.g. observation) to the dict
                 reference_key = get_nested_value(resource, [reference_field, "reference"])
                 if reference_key is not None and reference_type in reference_key:
                     reference_id = reference_key.split("/")[-1]
@@ -515,8 +515,8 @@ class Dataframer(ResourceDB):
 
     @lru_cache(maxsize=None)
     def flattened_specimens(self) -> Generator[dict, None, None]:
-        """generator that yields specimens populated with Specimen.subject fields
-        and Observation codes through Observation.focus"""
+        """generator that yields specimens populated with `Specimen.subject` fields
+        and Observation codes through `Observation.focus`"""
 
         resource_type = "Specimen"
         cursor = self.connection.cursor()

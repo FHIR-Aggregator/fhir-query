@@ -1,11 +1,8 @@
 # Initialize the fhir_query package
 import asyncio
-import concurrent
 import json
 import logging
 import sqlite3
-from urllib.parse import urlparse
-
 import tempfile
 from collections import defaultdict
 from typing import Any, Optional, Callable
@@ -18,7 +15,13 @@ UNKNOWN_CATEGORY = {"coding": [{"system": "http://snomed.info/sct", "code": "261
 
 
 def setup_logging(debug: bool, log_file: str) -> None:
-    """ """
+    """
+    Set up logging configuration.
+
+    Args:
+        debug (bool): Enable debug mode if True.
+        log_file (str): Path to the log file.
+    """
     log_level = logging.DEBUG if debug else logging.INFO
     file_handler = logging.FileHandler(log_file)
     logging.basicConfig(level=log_level, handlers=[file_handler])
@@ -33,7 +36,9 @@ class ResourceDB:
     def __init__(self, db_path: str = ":memory:"):
         """
         Initialize the ResourceDB instance and create the resources table if it doesn't exist.
-        :param db_path: Path to the SQLite database file (default is in-memory database).
+
+        Args:
+            db_path (str): Path to the SQLite database file (default is in-memory database).
         """
         self.db_path = db_path
         self.connection = sqlite3.connect(db_path)
@@ -67,8 +72,9 @@ class ResourceDB:
     def add(self, resource: dict[str, Any]) -> None:
         """
         Add a resource to the 'resources' table.
-        Add a resource to the 'resources' table.
-        :param resource: A dictionary with 'id', 'resourceType', and other fields.
+
+        Args:
+            resource (dict): A dictionary with 'id', 'resourceType', and other fields.
         """
         if "id" not in resource or "resourceType" not in resource:
             raise ValueError("Resource must contain 'id' and 'resourceType' fields.")
@@ -97,8 +103,12 @@ class ResourceDB:
     def all_keys(self, resource_type: str) -> list[Any]:
         """
         Retrieve all (id, resource_type) tuples for a given resource_type.
-        :param resource_type: The resource type to filter by.
-        :return: A list of tuples (id, resource_type).
+
+        Args:
+            resource_type (str): The resource type to filter by.
+
+        Returns:
+            list: A list of tuples (id, resource_type).
         """
         with self.connection:
             cursor = self.connection.execute(
@@ -114,8 +124,12 @@ class ResourceDB:
     def all_resources(self, resource_type: str) -> list[dict[str, Any]]:
         """
         Retrieve all resource dicts for a given resource_type.
-        :param resource_type: The resource type to filter by.
-        :return: A list of dicts.
+
+        Args:
+            resource_type (str): The resource type to filter by.
+
+        Returns:
+            list: A list of dicts.
         """
         with self.connection:
             cursor = self.connection.execute(
@@ -131,7 +145,9 @@ class ResourceDB:
     def count_resource_types(self) -> dict[str, Any]:
         """
         Count the number of resources for each resource_type.
-        :return: A dictionary with resource_type as keys and counts as values.
+
+        Returns:
+            dict: A dictionary with resource_type as keys and counts as values.
         """
         with self.connection:
             cursor = self.connection.execute(
@@ -149,9 +165,18 @@ class ResourceDB:
         """
         self.connection.close()
 
-    def aggregate(self, ignored_edges: list[str] = []) -> dict:
-        """Aggregate metadata counts resourceType(count)-count->resourceType(count)."""
+    def aggregate(self, ignored_edges=None) -> dict:
+        """
+        Aggregate metadata counts resourceType(count)-count->resourceType(count).
 
+        Args:
+            ignored_edges (list): List of edges to ignore during aggregation.
+
+        Returns:
+            dict: Aggregated metadata counts.
+        """
+        if ignored_edges is None:
+            ignored_edges = []
         nested_dict: Callable[[], defaultdict[str, defaultdict]] = lambda: defaultdict(defaultdict)
 
         count_resource_types = self.count_resource_types()
@@ -207,6 +232,8 @@ class GraphDefinitionRunner(ResourceDB):
 
         Args:
             fhir_base_url (str): Base URL of the FHIR server.
+            db_path (Optional[str]): Path to the SQLite database file. Defaults to a temporary file.
+            debug (Optional[bool]): Enable debug mode if True. Defaults to False.
         """
         if not db_path:
             # initializes the ResourceDB to a temporary file
@@ -240,11 +267,11 @@ class GraphDefinitionRunner(ResourceDB):
 
         Args:
             query_url (str): Fully constructed query URL.
-            spinner (Halo): Spinner object to show progress.
-            page_count (int): The current page count.
+            spinner (Halo): Spinner object to show progress. Defaults to None.
+            page_count (int): The current page count. Defaults to 0.
 
-        Yields:
-            dict: A resource from the query result.
+        Returns:
+            list: A list of resources from the query result.
         """
         retry = 0
         max_retry = 3
@@ -299,11 +326,19 @@ class GraphDefinitionRunner(ResourceDB):
         return []
 
     async def process_link(self, link, parent_resources, visited, spinner):
-        path = link.get("path", None)
-        params = link.get("params", None)
+        """
+        Processes a single link in the GraphDefinition.
+
+        Args:
+            link (dict): The link to process.
+            parent_resources (list): List of parent resources.
+            visited (set): Set of visited node-resource combinations to prevent cycles.
+            spinner (Halo): Spinner object to show progress.
+        """
         target_id = link["targetId"]
         source_id = link["sourceId"]
-        if params:
+        if "params" in link:
+            params = link["params"]
             current_path = set()
             for _ in parent_resources:
                 if _["resourceType"] == source_id:
@@ -311,7 +346,8 @@ class GraphDefinitionRunner(ResourceDB):
                     if key not in visited:
                         visited.add(key)
                         parent = dotty({_["resourceType"]: _})
-                        assert path, f"Path is required for {link}"
+                        assert "path" in link, f"Path is required for {link}"
+                        path = link["path"]
                         if path not in parent:
                             continue
                         _path = parent[path]
@@ -345,23 +381,9 @@ class GraphDefinitionRunner(ResourceDB):
         else:
             logging.debug(f"No `params` property found in link. {link} continuing")
 
-        # logging.debug(self.count_resource_types())
         if spinner:
             spinner.clear()
             spinner.succeed(f"Processed link: {link['targetId']}/{link['params']}")
-        # query_results = self.all_resources(target_id)
-        # edges = [edge for edge in graph_definition.get("link", []) if edge.get("sourceId") == target_id]
-        # if edges:
-        #     await self.process_links(
-        #         parent_target_id=target_id,
-        #         parent_resources=query_results,
-        #         graph_definition=graph_definition,
-        #         visited=visited,
-        #         spinner=spinner,
-        #     )
-        # else:
-        #     if spinner:
-        #         spinner.clear()
 
     async def process_links(
         self,
@@ -376,13 +398,10 @@ class GraphDefinitionRunner(ResourceDB):
 
         Args:
             parent_target_id (str): The resource_type of the parent resource.
-            parent_resources (generator dict): resources returned from the last query, can have multiple resource types.
+            parent_resources (list): Resources returned from the last query, can have multiple resource types.
             graph_definition (dict): The entire GraphDefinition resource.
             visited (set): Set of visited node-resource combinations to prevent cycles.
-            spinner (Halo): Spinner object to show progress
-
-        Returns:
-            dict: Aggregated results from all traversed links.
+            spinner (Halo): Spinner object to show progress.
         """
         links = [link for link in graph_definition.get("link", []) if link.get("sourceId") == parent_target_id]
         if spinner:
@@ -403,9 +422,6 @@ class GraphDefinitionRunner(ResourceDB):
             graph_definition (dict): The GraphDefinition resource.
             path (str): Path to query the FHIR server and pass to the GraphDefinition.
             spinner (Halo): Spinner object to show progress.
-
-        Returns:
-            dict: Aggregated results of all traversed resources.
         """
         visited: set[tuple[Any, Any, Any]] = set()
 
@@ -468,23 +484,35 @@ def tree() -> defaultdict:
 
 
 class VocabularyRunner:
+    """
+    A class to fetch and collect vocabularies from a FHIR server.
+
+    Args:
+        fhir_base_url (str): Base URL of the FHIR server.
+    """
+
     def __init__(self, fhir_base_url: str):
         """
         Initialize the VocabularyRunner instance.
-        :param fhir_base_url: Base URL of the FHIR server.
+
+        Args:
+            fhir_base_url (str): Base URL of the FHIR server.
         """
         self.fhir_base_url = fhir_base_url
 
     async def fetch_resource(self, resource_type: str, spinner: Halo = None) -> dict[str, dict[Any, Any]]:
         """
         Fetch resources of a given type from the FHIR server.
-        :param spinner: A Halo spinner object to show progress.
-        :param resource_type: The type of resource to fetch.
-        :return: A list of resources.
+
+        Args:
+            resource_type (str): The type of resource to fetch.
+            spinner (Halo, optional): A Halo spinner object to show progress. Defaults to None.
+
+        Returns:
+            dict: A dictionary with resource type as keys and counts as values.
         """
         counts: dict = {resource_type: {}}
         category_counts = counts[resource_type]
-        # A client with a 60s timeout for connecting, and a 10s timeout elsewhere.
         timeout = httpx.Timeout(10.0, connect=60.0)
         async with httpx.AsyncClient(timeout=timeout) as client:
             page_count = 1
@@ -498,7 +526,6 @@ class VocabularyRunner:
                 data = response.json()
                 for entry in data.get("entry", []):
                     resource = entry["resource"]
-                    # get the code, if not there, get the type
                     code = resource.get("code", resource.get("type", None))
                     if not code:
                         code = UNKNOWN_CATEGORY
@@ -523,8 +550,13 @@ class VocabularyRunner:
     async def collect(self, resource_types: list[str], spinner: Halo = None) -> list:
         """
         Collect vocabularies from the specified resource types.
-        :param spinner: A Halo spinner object to show progress.
-        :param resource_types: A list of resource types to collect vocabularies from.
+
+        Args:
+            resource_types (list[str]): A list of resource types to collect vocabularies from.
+            spinner (Halo, optional): A Halo spinner object to show progress. Defaults to None.
+
+        Returns:
+            list: A list of dictionaries with resource type as keys and counts as values.
         """
         tasks = []
 
@@ -532,10 +564,10 @@ class VocabularyRunner:
             tasks.append(asyncio.create_task(self.fetch_resource(resource_type, spinner)))
 
         results = await asyncio.gather(*tasks)
-        return results
+        return [_ for _ in results]
 
 
-def find_key_with_path(data, key_to_find, ignored_keys=[]):
+def find_key_with_path(data, key_to_find, ignored_keys=None):
     """
     Traverse the dictionary and find all occurrences of a given key.
     Returns a list of dictionaries containing the path and value for each match.
@@ -546,9 +578,14 @@ def find_key_with_path(data, key_to_find, ignored_keys=[]):
     :param ignored_keys: A list of keys to ignore during traversal.
     :return: A list of dictionaries with 'path' and 'value' for each match.
     """
+    if ignored_keys is None:
+        ignored_keys = []
+
     results = []
 
-    def recursive_search(d, current_path=[]):
+    def recursive_search(d, current_path=None):
+        if current_path is None:
+            current_path = []
         if isinstance(d, dict):
             for key, value in d.items():
                 new_path = current_path + [key]
