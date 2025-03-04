@@ -8,7 +8,7 @@ def parse_requirements(filename: str) -> list[str]:
 
 setup(
     name="fhir_query",
-    version="0.1.0",
+    version="0.1.1",
     packages=find_packages(),
     install_requires=parse_requirements("requirements.txt"),
     extras_require={

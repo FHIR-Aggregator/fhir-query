@@ -48,7 +48,7 @@ def test_runner(tmp_path: str) -> None:
     print(result.stderr)
     print(result.stdout)
     assert result.exit_code == 0, "CLI command failed"
-    assert "Running research-study-graph traversal" in result.stderr
+    assert "research-study-graph" in result.stderr, result.stderr
     assert "database available at:" in result.stderr
 
     assert pathlib.Path(f"{tmp_path}/fhir-query.sqlite").exists()

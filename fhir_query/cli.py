@@ -2,19 +2,17 @@ import asyncio
 import json
 import logging
 import sys
-from collections import defaultdict
 from typing import Any
 
-import pandas as pd
-
 import click
+import pandas as pd
 import requests
-from click_default_group import DefaultGroup
 import yaml
+from click_default_group import DefaultGroup
 from fhir.resources.graphdefinition import GraphDefinition
 from halo import Halo
 
-from fhir_query import GraphDefinitionRunner, setup_logging, VocabularyRunner
+from fhir_query import GraphDefinitionRunner, setup_logging
 from fhir_query.dataframer import Dataframer
 from fhir_query.visualizer import visualize_aggregation
 from fhir_query.vocabulary import vocabulary_simplifier
@@ -80,7 +78,6 @@ def main(
 
         logging.debug(runner.db_path)
         spinner = Halo(text=f"Running {_.id} traversal", spinner="dots", stream=sys.stderr)
-        spinner.start()
         try:
             await runner.run(graph_definition, path, spinner)
         finally:
