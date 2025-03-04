@@ -435,7 +435,6 @@ class GraphDefinitionRunner(ResourceDB):
                 if link["sourceId"] in parent_resource_types:
                     processed_links.append(link)
                     parallelize[link["sourceId"]].append(link)
-                    print(link)
 
             if not parallelize:
                 break
