@@ -80,7 +80,6 @@ def main(
 
         logging.debug(runner.db_path)
         spinner = Halo(text=f"Running {_.id} traversal", spinner="dots", stream=sys.stderr)
-        spinner.start()
         try:
             await runner.run(graph_definition, path, spinner)
         finally:

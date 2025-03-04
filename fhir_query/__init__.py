@@ -234,19 +234,21 @@ class GraphDefinitionRunner(ResourceDB):
             response.raise_for_status()
             return response.json()
 
-    async def execute_query(self, query_url: str) -> list[dict[str, Any]]:
+    async def execute_query(self, query_url: str, spinner: Halo = None, page_count: int = 0) -> list[dict[str, Any]]:
         """
         Executes a FHIR query for a given URL, returns all pages as a list of resources.
 
         Args:
             query_url (str): Fully constructed query URL.
+            spinner (Halo): Spinner object to show progress.
+            page_count (int): The current page count.
 
         Yields:
             dict: A resource from the query result.
         """
         retry = 0
         max_retry = 3
-
+        log_every_n_pages = 10
         while retry < max_retry:
             async with httpx.AsyncClient() as client:
                 try:
@@ -254,14 +256,24 @@ class GraphDefinitionRunner(ResourceDB):
                         print(f"Querying: {query_url}")
                     response = await client.get(query_url, timeout=300)
                     response.raise_for_status()
+                    page_count += 1
                     query_result = response.json()
                     resources = []
                     next_link = [link for link in query_result.get("link", []) if link["relation"] == "next"]
-                    for entry in query_result.get("entry", []):
+                    entries = query_result.get("entry", [])
+                    for entry in entries:
                         self.add(entry["resource"])
                         resources.append(entry["resource"])
                     if next_link:
-                        for entry in await self.execute_query(next_link[0]["url"]):
+                        if spinner and page_count % log_every_n_pages == 0:
+                            estimated_number_of_pages = "unknown"
+                            resource_type = "unknown"
+                            if entries:
+                                resource_type = entries[0]["resource"]["resourceType"]
+                            if "total" in query_result:
+                                estimated_number_of_pages = query_result["total"] // len(entries)
+                            spinner.info(f"Fetching {resource_type} page {page_count} of {estimated_number_of_pages}")
+                        for entry in await self.execute_query(next_link[0]["url"], spinner=spinner, page_count=page_count):
                             resources.append(entry)
 
                     if self.debug:
@@ -278,8 +290,78 @@ class GraphDefinitionRunner(ResourceDB):
                         logging.warning(f"ConnectTimeout: {e} sleeping for 5 seconds. Retry: {retry}")
                     await asyncio.sleep(5)
                     retry += 1
+                except httpx.RemoteProtocolError as e:
+                    if retry == max_retry:
+                        logging.warning(f"RemoteProtocolError: {e} sleeping for 5 seconds. Retry: {retry}")
+                    await asyncio.sleep(5)
+                    retry += 1
 
         return []
+
+    async def process_link(self, link, parent_resources, visited, spinner):
+        path = link.get("path", None)
+        params = link.get("params", None)
+        target_id = link["targetId"]
+        source_id = link["sourceId"]
+        if params:
+            current_path = set()
+            for _ in parent_resources:
+                if _["resourceType"] == source_id:
+                    key = (_["resourceType"], _["id"], target_id)
+                    if key not in visited:
+                        visited.add(key)
+                        parent = dotty({_["resourceType"]: _})
+                        assert path, f"Path is required for {link}"
+                        if path not in parent:
+                            continue
+                        _path = parent[path]
+                        if path.endswith(".id"):
+                            _path = source_id + "/" + _path
+                        if "_id={path}" in params and "/" in _path:
+                            _path = _path.split("/")[-1]
+                        current_path.add(_path)
+            if not current_path:
+                if spinner:
+                    spinner.fail(f"Could not find any resources for {source_id}->{target_id} link: {link}")
+                return
+            if spinner:
+                spinner.info(
+                    text=f"Processing link: {link['targetId']}/{link['params']} with {len(current_path)} {link['sourceId']}(s)"
+                )
+            _current_path = list(current_path)
+            chunk_size = 40
+            chunks = [_current_path]
+            if len(_current_path) > chunk_size:
+                chunks = [_current_path[i : i + chunk_size] for i in range(0, len(_current_path), chunk_size)]
+            tasks = []
+            for chunk in chunks:
+                _params = params.replace("{path}", ",".join(chunk))
+                query_url = f"{self.fhir_base_url}/{target_id}?{_params}"
+                tasks.append(asyncio.create_task(self.execute_query(query_url, spinner=spinner)))
+                if len(tasks) >= self.max_requests:
+                    await asyncio.gather(*tasks)
+                    tasks = []
+            await asyncio.gather(*tasks)
+        else:
+            logging.debug(f"No `params` property found in link. {link} continuing")
+
+        # logging.debug(self.count_resource_types())
+        if spinner:
+            spinner.clear()
+            spinner.succeed(f"Processed link: {link['targetId']}/{link['params']}")
+        # query_results = self.all_resources(target_id)
+        # edges = [edge for edge in graph_definition.get("link", []) if edge.get("sourceId") == target_id]
+        # if edges:
+        #     await self.process_links(
+        #         parent_target_id=target_id,
+        #         parent_resources=query_results,
+        #         graph_definition=graph_definition,
+        #         visited=visited,
+        #         spinner=spinner,
+        #     )
+        # else:
+        #     if spinner:
+        #         spinner.clear()
 
     async def process_links(
         self,
@@ -302,95 +384,11 @@ class GraphDefinitionRunner(ResourceDB):
         Returns:
             dict: Aggregated results from all traversed links.
         """
-
         links = [link for link in graph_definition.get("link", []) if link.get("sourceId") == parent_target_id]
-
-        for link in links:
-            path = link.get("path", None)
-            params = link.get("params", None)
-            target_id = link["targetId"]
-            source_id = link["sourceId"]
-            if params:
-
-                # create a parent resource and extract with the path
-                current_path = set()
-                for _ in parent_resources:
-                    if _["resourceType"] == source_id:
-                        key = (_["resourceType"], _["id"], target_id)
-                        if key not in visited:
-                            visited.add(key)
-                            # since path can point to anywhere in the resource, we need the full resource
-                            parent = dotty({_["resourceType"]: _})
-                            assert path, f"Path is required for {link}"
-
-                            #  assert path in parent, f"Path {path} not found in {parent}"
-                            if path not in parent:
-                                continue
-
-                            _path = parent[path]
-                            if path.endswith(".id"):
-                                _path = source_id + "/" + _path
-                            if "_id={path}" in params and "/" in _path:
-                                _path = _path.split("/")[-1]
-
-                            current_path.add(_path)
-                if not current_path:
-                    if spinner:
-                        spinner.fail(f"Could not find any resources for {source_id}->{target_id} link: {link}")
-                    continue
-
-                    # assert (
-                    #     current_path
-                    # ), f"Could not find any resources for {source_id} link: {link}"
-
-                if spinner:
-                    spinner.succeed()
-                    spinner.start(
-                        text=f"Processing link: {link['targetId']}/{link['params']} with {len(current_path)} {link['sourceId']}(s)"
-                    )
-
-                # handle current path <= chunk size
-                _current_path: list[Any] = list(current_path)
-                chunk_size = 40
-                chunks = [_current_path]
-                tasks = []
-                if len(_current_path) > chunk_size:
-                    chunks = [_current_path[i : i + chunk_size] for i in range(0, len(_current_path), chunk_size)]
-                for chunk in chunks:
-                    _params = params.replace("{path}", ",".join(chunk))
-                    query_url = f"{self.fhir_base_url}/{target_id}?{_params}"
-                    tasks.append(asyncio.create_task(self.execute_query(query_url)))
-                    if len(tasks) >= self.max_requests:
-                        await asyncio.gather(*tasks)
-                        tasks = []
-                await asyncio.gather(*tasks)
-            else:
-                logging.debug(f"No `params` property found in link. {link} continuing")
-
-            # get all resources for target
-            query_results = self.all_resources(target_id)
-
-            # show intermediate results
-            logging.debug(self.count_resource_types())
-
-            # are there any other links from this target_id to follow?
-
-            edges = [edge for edge in graph_definition.get("link", []) if edge.get("sourceId") == target_id]
-            if edges:
-                await self.process_links(
-                    parent_target_id=target_id,
-                    parent_resources=query_results,
-                    graph_definition=graph_definition,
-                    visited=visited,
-                    spinner=spinner,
-                )
-            else:
-                if spinner:
-                    spinner.clear()
-
-        # if spinner:
-        #     spinner.succeed()
-        # f"Processed link: {link['targetId']}/{link['params']} with {len(current_path)} {link['sourceId']}(s)")
+        if spinner:
+            spinner.info(f"Processing {len(links)} links for {parent_target_id} in parallel.")
+        tasks = [self.process_link(link, parent_resources, visited, spinner) for link in links]
+        await asyncio.gather(*tasks)
 
     async def run(
         self,
@@ -413,11 +411,11 @@ class GraphDefinitionRunner(ResourceDB):
 
         if path:
             url = self.fhir_base_url + path
-            if spinner:
-                spinner.start(text=f"Fetching {url}")
             assert self.recurse_count == 0, "Should not call this twice"
+            if spinner:
+                spinner.info(text=f"Fetching {url}")
             self.recurse_count += 1
-            parent_resources = await self.execute_query(url)
+            parent_resources = await self.execute_query(url, spinner=spinner)
             if spinner:
                 spinner.clear()
         else:
@@ -427,15 +425,42 @@ class GraphDefinitionRunner(ResourceDB):
             if spinner:
                 spinner.fail("No resources found")
 
-        start_resource_type = graph_definition["link"][0]["sourceId"]
+        parent_resource_types = self.count_resource_types().keys()
+        processed_links = []
+        while True:
+            parallelize = defaultdict(list)
+            for link in graph_definition["link"]:
+                if link in processed_links:
+                    continue
+                if link["sourceId"] in parent_resource_types:
+                    processed_links.append(link)
+                    parallelize[link["sourceId"]].append(link)
+                    print(link)
 
-        return await self.process_links(
-            parent_resources=parent_resources,
-            parent_target_id=start_resource_type,
-            graph_definition=graph_definition,
-            visited=visited,
-            spinner=spinner,
-        )
+            if not parallelize:
+                break
+
+            tasks = []
+            for source_id, links in parallelize.items():
+                if spinner:
+                    spinner.info(text=f"Processing {source_id} with {len(parent_resources)} resources")
+
+                # create a sub graph definition for the with only the links for the current source_id
+                parent_resources = self.all_resources(source_id)
+                _sub_graph_definition = {"link": links}
+
+                tasks.append(
+                    self.process_links(
+                        parent_target_id=source_id,
+                        parent_resources=parent_resources,
+                        graph_definition=_sub_graph_definition,
+                        visited=visited,
+                        spinner=spinner,
+                    )
+                )
+
+            await asyncio.gather(*tasks)
+            parent_resource_types = self.count_resource_types().keys()
 
 
 def tree() -> defaultdict:
