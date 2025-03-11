@@ -1,3 +1,6 @@
+from urllib.parse import urlparse, urlencode
+
+
 def _get_path(component):
     """Get the vocabulary path from the component."""
     for coding in component.get("code", {}).get("coding", []):
@@ -15,6 +18,11 @@ def _get_coding(component):
 def vocabulary_simplifier(bundle) -> list[dict]:
     """Simplify the vocabulary bundle."""
     df = []
+    base_url = bundle.get("link", [{}])[0].get("url", "")
+    assert base_url, "No base url found"
+    parsed_url = urlparse(base_url)
+    base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+
     resources = {f'{r["resource"]["resourceType"]}/{r["resource"]["id"]}': r["resource"] for r in bundle.get("entry", [])}
     for _id, resource in resources.items():
         if resource["resourceType"] != "Observation":
@@ -60,12 +68,16 @@ def vocabulary_simplifier(bundle) -> list[dict]:
             else:
                 item["low"] = None
                 item["high"] = None
+
+            resource, element = item["path"].spit(".")
+            url = base_url + f"/{resource}/?{element}={urlencode(item['code'])}&part-of-study=ResearchStudy/{research_study['id']}"
             item.update(
                 {
                     "research_study_title": research_study.get("title", None),
                     "research_study_description": research_study.get("description", None),
                     "observation": f'Observation/{resource["id"]}',
                     "research_study": f'ResearchStudy/{research_study["id"]}',
+                    "url": url,
                 }
             )
             df.append(item)
