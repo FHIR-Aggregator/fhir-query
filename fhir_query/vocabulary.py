@@ -1,4 +1,4 @@
-from urllib.parse import urlparse, urlencode
+from urllib.parse import urlparse, urlencode, quote_plus
 
 
 def _get_path(component):
@@ -69,8 +69,8 @@ def vocabulary_simplifier(bundle) -> list[dict]:
                 item["low"] = None
                 item["high"] = None
 
-            resource, element = item["path"].spit(".")
-            url = base_url + f"/{resource}/?{element}={urlencode(item['code'])}&part-of-study=ResearchStudy/{research_study['id']}"
+            path_resource, element = item["path"].split(".")
+            url = base_url + f"/{path_resource}/?{element}={quote_plus(str(item['code']))}&part-of-study=ResearchStudy/{research_study['id']}"
             item.update(
                 {
                     "research_study_title": research_study.get("title", None),
