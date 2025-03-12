@@ -12,7 +12,7 @@ with open('README.md', 'r') as f:
 
 setup(
     name="fhir_aggregator_client",
-    version="0.1.3",
+    version="0.1.6",
     packages=find_packages(),
     install_requires=parse_requirements("requirements.txt"),
     long_description=long_description,

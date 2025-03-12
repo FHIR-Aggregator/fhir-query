@@ -1,5 +1,7 @@
 from urllib.parse import urlparse, urlencode, quote_plus
 
+import inflection
+
 
 def _get_path(component):
     """Get the vocabulary path from the component."""
@@ -34,6 +36,13 @@ def vocabulary_simplifier(bundle) -> list[dict]:
         assert research_study, f"No research_study reference found for Observation {resource['id']} {focus_reference}"
         for component in resource.get("component", []):
             path = _get_path(component)
+            path_resource, element = path.split(".")
+
+            # TODO this is a hack to get the name of the SearchParameter from the element name
+            # change element from camelCase to dash-case
+            element = inflection.dasherize(inflection.underscore(element))
+
+            code_filter = None
             coding = _get_coding(component)
             item = {
                 "research_study_identifiers": ",".join([i.get("value", "") for i in research_study.get("identifier", [])]),
@@ -48,6 +57,8 @@ def vocabulary_simplifier(bundle) -> list[dict]:
                         "extension_url": coding.get("system", None),
                     }
                 )
+                # TODO this is a hack to get the name of the SearchParameter from the extension url
+                element = item["extension_url"].split('-')[-1]
             else:
                 item.update(
                     {
@@ -57,6 +68,8 @@ def vocabulary_simplifier(bundle) -> list[dict]:
                         "extension_url": None,
                     }
                 )
+            if item["code"]:
+                code_filter = f"{element}={quote_plus(str(item['code']))}"
 
             if "valueInteger" in component:
                 item["count"] = component["valueInteger"]
@@ -69,16 +82,20 @@ def vocabulary_simplifier(bundle) -> list[dict]:
                 item["low"] = None
                 item["high"] = None
 
-            path_resource, element = item["path"].split(".")
-            url = base_url + f"/{path_resource}/?{element}={quote_plus(str(item['code']))}&part-of-study=ResearchStudy/{research_study['id']}"
+            url = base_url + f"/{path_resource}?{code_filter}&part-of-study=ResearchStudy/{research_study['id']}"
+            if code_filter:
+                item["url"] = url
+            else:
+                item["url"] = None
+
             item.update(
                 {
                     "research_study_title": research_study.get("title", None),
                     "research_study_description": research_study.get("description", None),
                     "observation": f'Observation/{resource["id"]}',
                     "research_study": f'ResearchStudy/{research_study["id"]}',
-                    "url": url,
                 }
             )
+
             df.append(item)
     return df
