@@ -288,6 +288,8 @@ class GraphDefinitionRunner(ResourceDB):
                     resources = []
                     next_link = [link for link in query_result.get("link", []) if link["relation"] == "next"]
                     entries = query_result.get("entry", [])
+                    if len(entries) == 0:
+                        logging.info(f"No entries: {query_result}")
                     for entry in entries:
                         self.add(entry["resource"])
                         resources.append(entry["resource"])
@@ -322,6 +324,15 @@ class GraphDefinitionRunner(ResourceDB):
                         logging.warning(f"RemoteProtocolError: {e} sleeping for 5 seconds. Retry: {retry}")
                     await asyncio.sleep(5)
                     retry += 1
+                except httpx.HTTPStatusError as e:
+                    err: httpx.HTTPStatusError = e
+                    if err.response.status_code == 503:
+                        if retry == max_retry:
+                            logging.warning(f"RemoteProtocolError: {e} sleeping for 5 seconds. Retry: {retry}")
+                        await asyncio.sleep(5)
+                        retry += 1
+                    else:
+                        raise e
 
         return []
 
