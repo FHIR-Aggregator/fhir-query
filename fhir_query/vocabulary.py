@@ -38,6 +38,9 @@ def vocabulary_simplifier(bundle) -> list[dict]:
             path = _get_path(component)
             path_resource, element = path.split(".")
 
+            # get the documentation link for this path
+            doc_url = f"https://hl7.org/fhir/R4B/{path_resource.lower()}-definitions.html#{path}"
+
             # TODO this is a hack to get the name of the SearchParameter from the element name
             # change element from camelCase to dash-case
             element = inflection.dasherize(inflection.underscore(element))
@@ -47,6 +50,7 @@ def vocabulary_simplifier(bundle) -> list[dict]:
             item = {
                 "research_study_identifiers": ",".join([i.get("value", "") for i in research_study.get("identifier", [])]),
                 "path": path,
+                "documentation": doc_url
             }
             if path.endswith(".extension"):
                 item.update(
@@ -96,6 +100,7 @@ def vocabulary_simplifier(bundle) -> list[dict]:
                     "research_study": f'ResearchStudy/{research_study["id"]}',
                 }
             )
+
 
             df.append(item)
     return df
