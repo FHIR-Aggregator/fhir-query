@@ -50,7 +50,7 @@ def vocabulary_simplifier(bundle) -> list[dict]:
             item = {
                 "research_study_identifiers": ",".join([i.get("value", "") for i in research_study.get("identifier", [])]),
                 "path": path,
-                "documentation": doc_url
+                "documentation": doc_url,
             }
             if path.endswith(".extension"):
                 item.update(
@@ -62,7 +62,7 @@ def vocabulary_simplifier(bundle) -> list[dict]:
                     }
                 )
                 # TODO this is a hack to get the name of the SearchParameter from the extension url
-                element = item["extension_url"].split('-')[-1]
+                element = item["extension_url"].split("-")[-1]
             else:
                 item.update(
                     {
@@ -100,7 +100,6 @@ def vocabulary_simplifier(bundle) -> list[dict]:
                     "research_study": f'ResearchStudy/{research_study["id"]}',
                 }
             )
-
 
             df.append(item)
     return df

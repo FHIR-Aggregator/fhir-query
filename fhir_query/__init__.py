@@ -291,7 +291,9 @@ class GraphDefinitionRunner(ResourceDB):
                     if len(entries) == 0:
                         logging.info(f"No entries: {query_result}")
                     for entry in entries:
+                        # write to db
                         self.add(entry["resource"])
+                        # return to caller
                         resources.append(entry["resource"])
                     if next_link:
                         if spinner and page_count % log_every_n_pages == 0:
