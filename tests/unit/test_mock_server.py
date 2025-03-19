@@ -5,7 +5,7 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-from fhir_aggregator_client.cli import main
+from fhir_aggregator_client.cli import cli as main
 from fhir_aggregator_client.dataframer import Dataframer
 from fhir_aggregator_client.visualizer import visualize_aggregation
 
@@ -32,6 +32,7 @@ def test_runner(tmp_path: str) -> None:
     result = runner.invoke(
         main,
         [
+            "run",
             "tests/fixtures/ResearchStudyGraph.yaml",
             "/ResearchStudy?_id=123",
             "--fhir-base-url",

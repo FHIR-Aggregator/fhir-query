@@ -8,14 +8,14 @@ def test_default_option() -> None:
     result = runner.invoke(cli, ["--help"])
     print(result.output)
     output = result.output
-    for _ in ["main*", "vocabulary", "ls", "results"]:
+    for _ in ["run", "vocabulary", "ls", "results"]:
         assert _ in output, f"Expected {_} in {output}"
 
 
 def test_help_option() -> None:
     """Test help option."""
     runner = CliRunner()
-    result = runner.invoke(cli, ["main", "--help"])
+    result = runner.invoke(cli, ["run", "--help"])
     output = result.output
     print(output)
     assert "Usage:" in output
@@ -34,4 +34,4 @@ def test_visualize_help() -> None:
     output = result.output
     assert "Usage:" in output
     assert "--db-path" in output
-    assert "--output-path" in output
+    assert "OUTPUT_PATH" in output
