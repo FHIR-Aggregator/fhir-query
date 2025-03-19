@@ -4,11 +4,11 @@ link:
 - params: identifier=UNUSED
   sourceId: ROOT
   targetId: ResearchStudy
-- params: _has:ResearchSubject:subject:study={path}&_revinclude=Group:member&_count=1000&_total=accurate
+- params: _has:ResearchSubject:subject:study={ref}&_revinclude=Group:member&_count=1000&_total=accurate
   path: ResearchStudy.id
   sourceId: ResearchStudy
   targetId: Patient
-- params: subject={path}&_revinclude=DocumentReference:subject&_revinclude=Group:member&_count=1000&_total=accurate
+- params: subject={ref}&_revinclude=DocumentReference:subject&_revinclude=Group:member&_count=1000&_total=accurate
   path: Patient.id
   sourceId: Patient
   targetId: Specimen
