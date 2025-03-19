@@ -50,7 +50,7 @@ def cli():
     help=f"Base URL of the FHIR server. default: env ${FHIR_BASE_ENV_VAR}",
     envvar=FHIR_BASE_ENV_VAR,
 )
-@click.option('--format', 'output_format', '-f', default='tsv', help='Output format', type=click.Choice(['tsv', 'yaml', 'json']))
+@click.option("--format", "output_format", "-f", default="tsv", help="Output format", type=click.Choice(["tsv", "yaml", "json"]))
 @click.option("--debug", is_flag=True, help="Enable debug mode.")
 @click.option("--log-file", default=DEFAULT_LOG_FILE, help=f"Path to the log file. default={DEFAULT_LOG_FILE}")
 @click.option(
@@ -116,6 +116,7 @@ def vocabulary(
                 if launch_dtale:
                     # TODO - add check that dtale is installed
                     import dtale
+
                     spinner.succeed(f"Showing {len(results)} vocabularies in browser")
                     dtale.show(df, subprocess=False, open_browser=True, port=40000)
                 else:
@@ -130,12 +131,14 @@ def vocabulary(
 
 
 @cli.command()
-@click.option('--format', 'output_format', '-f', default='table', help='Output format', type=click.Choice(['table', 'yaml', 'json']))
+@click.option(
+    "--format", "output_format", "-f", default="table", help="Output format", type=click.Choice(["table", "yaml", "json"])
+)
 def ls(output_format) -> None:
     """List all the installed GraphDefinitions."""
     if output_format == "table":
-        rows = [[_['id'], _['description']] for _ in ls_graph_definitions()]
-        print(tabulate(rows, headers=['id', 'description'], tablefmt='orgtbl'))
+        rows = [[_["id"], _["description"]] for _ in ls_graph_definitions()]
+        print(tabulate(rows, headers=["id", "description"], tablefmt="orgtbl"))
     elif output_format == "json":
         print(json.dumps(ls_graph_definitions(), indent=2))
     else:
@@ -149,7 +152,12 @@ def ls(output_format) -> None:
     help=f"Base URL of the FHIR server. default: env ${FHIR_BASE_ENV_VAR}",
     envvar=FHIR_BASE_ENV_VAR,
 )
-@click.option("--db-path", default=DEFAULT_DB_PATH, help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}", envvar=DB_PATH_ENV_VAR)
+@click.option(
+    "--db-path",
+    default=DEFAULT_DB_PATH,
+    help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}",
+    envvar=DB_PATH_ENV_VAR,
+)
 @click.option("--debug", is_flag=True, help="Enable debug mode.")
 @click.option("--log-file", default=DEFAULT_LOG_FILE, help=f"Path to the log file. default={DEFAULT_LOG_FILE}")
 @click.argument("graph-definition", required=True)
@@ -238,7 +246,12 @@ def results():
 
 
 @results.command(name="visualize")
-@click.option("--db-path", default=DEFAULT_DB_PATH, help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}", envvar=DB_PATH_ENV_VAR)
+@click.option(
+    "--db-path",
+    default=DEFAULT_DB_PATH,
+    help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}",
+    envvar=DB_PATH_ENV_VAR,
+)
 @click.option(
     "--ignored-edges",
     "-i",
@@ -265,7 +278,12 @@ def visualize(db_path: str, output_path: str, ignored_edges: list[str]) -> None:
 
 
 @results.command(name="summarize")
-@click.option("--db-path", default=DEFAULT_DB_PATH, help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}", envvar=DB_PATH_ENV_VAR)
+@click.option(
+    "--db-path",
+    default=DEFAULT_DB_PATH,
+    help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}",
+    envvar=DB_PATH_ENV_VAR,
+)
 def summarize(db_path: str) -> None:
     """Summarize the aggregation results."""
     from fhir_aggregator_client import ResourceDB
@@ -282,7 +300,12 @@ def summarize(db_path: str) -> None:
 
 @results.command(name="dataframe")
 # TODO - fix the default paths
-@click.option("--db-path", default=DEFAULT_DB_PATH, help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}", envvar=DB_PATH_ENV_VAR)
+@click.option(
+    "--db-path",
+    default=DEFAULT_DB_PATH,
+    help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}",
+    envvar=DB_PATH_ENV_VAR,
+)
 @click.option(
     "--dtale",
     "launch_dtale",
