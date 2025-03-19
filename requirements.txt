@@ -11,6 +11,8 @@ click_default_group
 inflection
 pandas
 
+tabulate
+
 # nested_lookup
 # glom
 

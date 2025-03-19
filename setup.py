@@ -10,16 +10,17 @@ with open('README.md', 'r') as f:
     long_description = f.read()
 
 
+
 setup(
     name="fhir_aggregator_client",
-    version="0.1.8rc7",
+    version="0.1.8rc8",
     packages=find_packages(exclude=['ez_setup', 'tests', 'tests.*']),
     install_requires=parse_requirements("requirements.txt"),
     long_description=long_description,
     long_description_content_type='text/markdown',
     author='walsbr',
     author_email='walsbr@ohsu.edu',
-    url='https://github.com/FHIR-Aggregator/fhir-query',
+    url='https://github.com/FHIR-Aggregator/fhir-aggregator-client.git',
     extras_require={
         'dtale': ['dtale'],
     },
