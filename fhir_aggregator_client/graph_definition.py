@@ -60,7 +60,7 @@ def ls() -> list[dict]:
             {
                 "description": graph_definition_dict.get("description", "No description found"),
                 "path": path,
-                "name": graph_definition_dict.get("name", "No name found"),
+                # "name": graph_definition_dict.get("name", "No name found"),
                 "id": graph_definition_dict.get("id"),
             }
         )

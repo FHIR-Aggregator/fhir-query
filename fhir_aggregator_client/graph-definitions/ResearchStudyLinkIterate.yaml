@@ -1,4 +1,4 @@
-description: "(dbGAP) Retrieve ResearchStudy and children. Uses HAPI's deep linking. fhir-query: '/ResearchStudy?_id=phs001232'"
+description: "(dbGAP) Retrieve ResearchStudy and children. Uses HAPI's deep linking. fhir-query '/ResearchStudy?_id=phs001232'"
 id: research-study-link-iterate
 name: ResearchStudyLinkIterate
 resourceType: GraphDefinition

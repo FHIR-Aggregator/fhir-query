@@ -12,6 +12,7 @@ import yaml
 from click_default_group import DefaultGroup
 from fhir.resources.graphdefinition import GraphDefinition
 from halo import Halo
+from tabulate import tabulate
 
 from fhir_aggregator_client import GraphDefinitionRunner, setup_logging, ensure_our_directory
 from fhir_aggregator_client.dataframer import Dataframer
@@ -22,18 +23,23 @@ from fhir_aggregator_client.graph_definition import ls as ls_graph_definitions
 DEFAULT_LOG_FILE = pathlib.Path(ensure_our_directory()) / "app.log"
 FHIR_BASE_ENV_VAR = "FHIR_BASE"
 
+DB_PATH_ENV_VAR = "FHIR_DB_PATH"
+DEFAULT_DB_PATH = pathlib.Path(ensure_our_directory()) / "fhir-graph.sqlite"
+DEFAULT_VISUALIZATION_PATH = "fhir-graph.html"
+DEFAULT_TSV_PATH = "fhir-graph.tsv"
 
-class CustomDefaultGroup(DefaultGroup):
+
+class CustomDefaultGroup(click.Group):
     def list_commands(self, ctx):
         # def natural_keys(text):
         #     return [int(c) if c.isdigit() else c for c in re.split(r'(\d+)', text)]
         # return sorted(self.commands.keys(), key=natural_keys)
-        return ["ls", "main", "results", "vocabulary"]
+        return ["ls", "run", "results", "vocabulary"]
 
 
 @click.group(cls=CustomDefaultGroup)
 def cli():
-    """Run FHIR GraphDefinition traversal."""
+    """FHIR-Aggregator utilities."""
     pass
 
 
@@ -44,20 +50,27 @@ def cli():
     help=f"Base URL of the FHIR server. default: env ${FHIR_BASE_ENV_VAR}",
     envvar=FHIR_BASE_ENV_VAR,
 )
-@click.option("--raw", is_flag=True, default=False, help="Do not create a dataframe. default=False")
-@click.option("--tsv", is_flag=True, default=True, help="Render dataframe as tsv. default=True")
+@click.option('--format', 'output_format', '-f', default='tsv', help='Output format', type=click.Choice(['tsv', 'yaml', 'json']))
 @click.option("--debug", is_flag=True, help="Enable debug mode.")
 @click.option("--log-file", default=DEFAULT_LOG_FILE, help=f"Path to the log file. default={DEFAULT_LOG_FILE}")
+@click.option(
+    "--dtale",
+    "launch_dtale",
+    default=False,
+    show_default=True,
+    is_flag=True,
+    help="Open the graph in a browser using the dtale package for interactive data exploration.",
+)
 @click.argument("output_path", type=click.File("w"), required=False, default=sys.stdout)
 def vocabulary(
     fhir_base_url: str,
     output_path: click.File,
     debug: bool,
     log_file: str,
-    raw: bool,
-    tsv: bool,
+    output_format: str,
+    launch_dtale: bool,
 ) -> None:
-    """DataFrame of key Resources and CodeSystems.
+    """FHIR-Aggregator's key Resources and CodeSystems.
     \b
 
     OUTPUT_PATH: Path to the output file. If not provided, the output will be printed to stdout.
@@ -72,20 +85,42 @@ def vocabulary(
 
     try:
         with Halo(text="Collecting vocabularies", spinner="dots", stream=sys.stderr) as spinner:
-            query_url = f"{fhir_base_url}/Observation?code=vocabulary&_include=Observation:focus"
+            query_url = f"{fhir_base_url}/Observation?_count=1000&code=vocabulary&_include=Observation:focus"
             response = requests.get(query_url, timeout=300)
             response.raise_for_status()
             bundle = response.json()
             results = bundle
-            if not raw:
+
+            if launch_dtale:
+                click.secho("Rendering tsv output in browser using dtale", file=sys.stderr)
+                output_format = "tsv"
+
+            vocabulary_count = 0
+            for entry in bundle.get("entry", []):
+                resource = entry.get("resource", {})
+                component_list = resource.get("component", [])
+                vocabulary_count += len(component_list)
+
+            if not output_format in ["yaml", "json"]:
                 results = vocabulary_simplifier(bundle)
-            if not tsv:
+
+            if output_format == "yaml":
                 yaml_results = yaml.dump(results, default_flow_style=False, sort_keys=False)
                 print(yaml_results, file=output_stream)
+                spinner.succeed(f"Wrote {vocabulary_count} vocabularies to {output_stream.name}")
+            elif output_format == "json":
+                print(json.dumps(results, indent=2), file=output_stream)
+                spinner.succeed(f"Wrote {vocabulary_count} vocabularies to {output_stream.name}")
             else:
                 df = pd.DataFrame(results)
-                df.to_csv(output_stream, sep="\t", index=False)
-            spinner.succeed(f"Wrote {len(results)} vocabularies to {output_stream.name}")
+                if launch_dtale:
+                    # TODO - add check that dtale is installed
+                    import dtale
+                    spinner.succeed(f"Showing {len(results)} vocabularies in browser")
+                    dtale.show(df, subprocess=False, open_browser=True, port=40000)
+                else:
+                    df.to_csv(output_stream, sep="\t", index=False)
+                    spinner.succeed(f"Wrote {len(results)} vocabularies to {output_stream.name}")
 
     except Exception as e:
         logging.error(f"Error: {e}", exc_info=True)
@@ -95,10 +130,16 @@ def vocabulary(
 
 
 @cli.command()
-def ls() -> None:
+@click.option('--format', 'output_format', '-f', default='table', help='Output format', type=click.Choice(['table', 'yaml', 'json']))
+def ls(output_format) -> None:
     """List all the installed GraphDefinitions."""
-    for graph_description in ls_graph_definitions():
-        click.echo(f"{graph_description['id']} - {graph_description['description']}")
+    if output_format == "table":
+        rows = [[_['id'], _['description']] for _ in ls_graph_definitions()]
+        print(tabulate(rows, headers=['id', 'description'], tablefmt='orgtbl'))
+    elif output_format == "json":
+        print(json.dumps(ls_graph_definitions(), indent=2))
+    else:
+        print(yaml.dump(ls_graph_definitions(), default_flow_style=False))
 
 
 @cli.command()
@@ -108,12 +149,12 @@ def ls() -> None:
     help=f"Base URL of the FHIR server. default: env ${FHIR_BASE_ENV_VAR}",
     envvar=FHIR_BASE_ENV_VAR,
 )
-@click.option("--db-path", default="/tmp/fhir-graph.sqlite", help="path to of sqlite db default: /tmp/fhir-graph.sqlite")
+@click.option("--db-path", default=DEFAULT_DB_PATH, help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}", envvar=DB_PATH_ENV_VAR)
 @click.option("--debug", is_flag=True, help="Enable debug mode.")
 @click.option("--log-file", default=DEFAULT_LOG_FILE, help=f"Path to the log file. default={DEFAULT_LOG_FILE}")
 @click.argument("graph-definition", required=True)
 @click.argument("fhir-query", required=True)
-def main(
+def run(
     graph_definition: str,
     fhir_query: str,
     fhir_base_url: str,
@@ -121,7 +162,7 @@ def main(
     log_file: str,
     debug: bool,
 ) -> None:
-    """Run a GraphDefinition traversal.
+    """Run GraphDefinition queries.
 
     GRAPH_DEFINITION is the path|id of a GraphDefinition file.
     \nFHIR_QUERY the query to start traversal.
@@ -192,13 +233,12 @@ def main(
 
 @cli.group()
 def results():
-    """Commands for working with the results of a GraphDefinition traversal."""
+    """Work with the results of a GraphDefinition query."""
     pass
 
 
 @results.command(name="visualize")
-@click.option("--db-path", default="/tmp/fhir-graph.sqlite", help="path to sqlite db default: /tmp/fhir-graph.sqlite")
-@click.option("--output-path", default="/tmp/fhir-graph.html", help="path output html default: /tmp/fhir-graph.html")
+@click.option("--db-path", default=DEFAULT_DB_PATH, help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}", envvar=DB_PATH_ENV_VAR)
 @click.option(
     "--ignored-edges",
     "-i",
@@ -206,22 +246,26 @@ def results():
     help="Edges to ignore in the visualization default=part-of-study",
     default=["part-of-study"],
 )
+@click.argument("output_path", type=click.File("w"), required=False, default=DEFAULT_VISUALIZATION_PATH)
 def visualize(db_path: str, output_path: str, ignored_edges: list[str]) -> None:
-    """Visualize the FHIR Resources in the database."""
+    """Visualize the FHIR Resources in the database.
+
+    \b
+    OUTPUT_PATH: Path to the output file. If not provided, the output will be written to ./fhir-graph.html.
+    """
     from fhir_aggregator_client import ResourceDB
 
     try:
         db = ResourceDB(db_path=db_path)
-        visualize_aggregation(db.aggregate(ignored_edges), output_path)
-        click.echo(f"Wrote: {output_path}", file=sys.stderr)
+        visualize_aggregation(db.aggregate(ignored_edges), output_path.name)
+        click.echo(f"Wrote: {output_path.name}", file=sys.stderr)
     except Exception as e:
         logging.error(f"Error: {e}", exc_info=True)
         click.echo(f"Error: {e}", file=sys.stderr)
-        # raise e
 
 
 @results.command(name="summarize")
-@click.option("--db-path", default="/tmp/fhir-graph.sqlite", help="path to sqlite db")
+@click.option("--db-path", default=DEFAULT_DB_PATH, help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}", envvar=DB_PATH_ENV_VAR)
 def summarize(db_path: str) -> None:
     """Summarize the aggregation results."""
     from fhir_aggregator_client import ResourceDB
@@ -238,8 +282,7 @@ def summarize(db_path: str) -> None:
 
 @results.command(name="dataframe")
 # TODO - fix the default paths
-@click.option("--db-path", default="/tmp/fhir-graph.sqlite", help="path to sqlite db")
-@click.option("--output-path", default="/tmp/fhir-graph.tsv", help="path output tsv")
+@click.option("--db-path", default=DEFAULT_DB_PATH, help=f"Path to sqlite database. default: {DEFAULT_DB_PATH} env: {DB_PATH_ENV_VAR}", envvar=DB_PATH_ENV_VAR)
 @click.option(
     "--dtale",
     "launch_dtale",
@@ -254,8 +297,12 @@ def summarize(db_path: str) -> None:
     type=click.Choice(["Specimen", "DocumentReference", "ResearchSubject", "Patient"]),
     default="Specimen",
 )
+@click.argument("output_path", type=click.File("w"), required=False, default=DEFAULT_TSV_PATH)
 def dataframe(db_path: str, output_path: str, launch_dtale: bool, data_type: str) -> None:
-    """Create dataframes from the local db."""
+    """Create dataframe from the local db.
+    \b
+    OUTPUT_PATH: Path to the output file. If not provided, the output will be written to ./fhir-graph.tsv
+    """
 
     try:
         db = Dataframer(db_path=db_path)
@@ -274,10 +321,9 @@ def dataframe(db_path: str, output_path: str, launch_dtale: bool, data_type: str
 
             dtale.show(df, subprocess=False, open_browser=True, port=40000)
         elif df is not None:
-            # export to csv
-            file_name = output_path if output_path else f"{data_type}.csv"
-            df.to_csv(file_name, index=False)
-            click.secho(f"Saved {file_name}", file=sys.stderr)
+            # export to tsv
+            df.to_csv(output_path, sep="\t", index=False)
+            click.secho(f"Saved {output_path.name}", file=sys.stderr)
         else:
             click.secho(f"No data found for {data_type}", file=sys.stderr)
 
@@ -286,8 +332,6 @@ def dataframe(db_path: str, output_path: str, launch_dtale: bool, data_type: str
         click.echo(f"Error: {e}", file=sys.stderr)
         # raise e
 
-
-cli.set_default_command(main)
 
 if __name__ == "__main__":
     cli()
