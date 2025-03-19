@@ -3,7 +3,7 @@ from collections import defaultdict
 from functools import lru_cache
 from typing import Generator
 
-from fhir_query import ResourceDB
+from fhir_aggregator_client import ResourceDB
 
 import inflection
 

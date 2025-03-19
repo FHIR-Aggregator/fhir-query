@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import sqlite3
+import sys
 import tempfile
 from collections import defaultdict
 from typing import Any, Optional, Callable
@@ -10,8 +11,21 @@ from typing import Any, Optional, Callable
 import httpx
 from dotty_dict import dotty
 from halo import Halo
+import os
 
 UNKNOWN_CATEGORY = {"coding": [{"system": "http://snomed.info/sct", "code": "261665006", "display": "Unknown"}]}
+
+
+def ensure_our_directory() -> str:
+    # Get the home directory path
+    home_dir = os.path.expanduser("~")
+    # Define the new directory path
+    our_directory = os.path.join(home_dir, ".fhir-aggregator")
+    if not os.path.exists(our_directory):
+        print(f"Creating directory: {our_directory}", file=sys.stderr)
+    # Create the directory
+    os.makedirs(our_directory, exist_ok=True)
+    return our_directory
 
 
 def setup_logging(debug: bool, log_file: str) -> None:
@@ -195,6 +209,11 @@ class ResourceDB:
 
                 # refs = nested_lookup("reference", _)
                 refs = find_key_with_path(_, "reference", ignored_keys=ignored_edges)
+
+                # if _['resourceType'] == 'Group':
+                #     print(_)
+                #     print(refs)
+
                 for match in refs:
                     path, ref = match.values()
 
@@ -210,6 +229,7 @@ class ResourceDB:
                     #     continue
                     # if set([resource_type, ref_resource_type]) == set(['Group', 'Patient']):
                     #     pass
+
                     dst = summary[resource_type]["references"][ref_resource_type]
                     if "count" not in dst:
                         dst["count"] = 0
@@ -328,13 +348,16 @@ class GraphDefinitionRunner(ResourceDB):
                     retry += 1
                 except httpx.HTTPStatusError as e:
                     err: httpx.HTTPStatusError = e
-                    if err.response.status_code == 503:
+                    if err.response.status_code in [503, 429]:
                         if retry == max_retry:
+                            if self.debug:
+                                print(f"RemoteProtocolError: {e} sleeping for 5 seconds. Retry: {retry}")
                             logging.warning(f"RemoteProtocolError: {e} sleeping for 5 seconds. Retry: {retry}")
                         await asyncio.sleep(5)
                         retry += 1
                     else:
-                        raise e
+                        retry = max_retry
+                        logging.warning(f"RemoteProtocolError: {e} abandoning thread for url {query_url}")
 
         return []
 
@@ -366,7 +389,8 @@ class GraphDefinitionRunner(ResourceDB):
                         _path = parent[path]
                         if path.endswith(".id"):
                             _path = source_id + "/" + _path
-                        if "_id={path}" in params and "/" in _path:
+                        # See https://www.hl7.org/fhir/graphdefinition-definitions.html#GraphDefinition.link.params
+                        if "_id={ref}" in params and "/" in _path:
                             _path = _path.split("/")[-1]
                         current_path.add(_path)
             if not current_path:
@@ -384,7 +408,8 @@ class GraphDefinitionRunner(ResourceDB):
                 chunks = [_current_path[i : i + chunk_size] for i in range(0, len(_current_path), chunk_size)]
             tasks = []
             for chunk in chunks:
-                _params = params.replace("{path}", ",".join(chunk))
+                # https://www.hl7.org/fhir/graphdefinition-definitions.html#GraphDefinition.link.params
+                _params = params.replace("{ref}", ",".join(chunk))
                 query_url = f"{self.fhir_base_url}/{target_id}?{_params}"
                 tasks.append(asyncio.create_task(self.execute_query(query_url, spinner=spinner)))
                 if len(tasks) >= self.max_requests:
@@ -396,7 +421,7 @@ class GraphDefinitionRunner(ResourceDB):
 
         if spinner:
             spinner.clear()
-            spinner.succeed(f"Processed link: {link['targetId']}/{link['params']}")
+            spinner.succeed(f"Processed link: {link['targetId']}/{link.get('params', '')}")
 
     async def process_links(
         self,
@@ -466,6 +491,8 @@ class GraphDefinitionRunner(ResourceDB):
                     parallelize[link["sourceId"]].append(link)
 
             if not parallelize:
+                if self.debug:
+                    print("No more links to process", parent_resource_types)
                 break
 
             tasks = []
@@ -603,6 +630,9 @@ def find_key_with_path(data, key_to_find, ignored_keys=None):
             for key, value in d.items():
                 new_path = current_path + [key]
 
+                # if data.get('resourceType', None) == 'Group':
+                #     print('new_path scalar', new_path, data[new_path[0]])
+
                 if key in ignored_keys:
                     continue  # Skip paths containing ignored keys
 
@@ -622,6 +652,8 @@ def find_key_with_path(data, key_to_find, ignored_keys=None):
         elif isinstance(d, list):
             for index, item in enumerate(d):
                 new_path = current_path + [index]
+                # if data.get('resourceType', None) == 'Group':
+                #     print('new_path []', new_path)
                 recursive_search(item, new_path)
 
     recursive_search(data)
