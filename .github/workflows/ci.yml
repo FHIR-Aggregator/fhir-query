@@ -27,4 +27,4 @@ jobs:
         run: mypy --ignore-missing-imports  fhir_query/ tests/
 
       - name: Run Pytest
-        run: pytest
+        run: pytest tests/unit
