@@ -1,0 +1,96 @@
+description: A graph to traverse Condition to [ResearchStudy, ResearchSubject, Patient, Specimen, DocumentReference]
+id: condition-graph
+name: ConditionGraph
+resourceType: GraphDefinition
+status: active
+# Condition?code=Acinar%20cell%20carcinoma
+# /Patient?_has:Condition:subject:code=Acinar%20cell%20carcinoma&_total=accurate
+link:
+
+- params: '_id={path}'
+  sourceId: Condition
+  targetId: Patient
+  path: Condition.subject.reference
+
+- params: 'subject={path}&_include=ResearchSubject:study'
+  sourceId: Patient
+  targetId: ResearchSubject
+  path: Patient.id
+
+- params:
+  sourceId: ResearchSubject
+  targetId: ResearchStudy
+  path:
+
+- params: member={path}
+  sourceId: Patient
+  targetId: Group
+  path: Patient.id
+
+
+- params: subject={path}
+  path: Patient.id
+  sourceId: Patient
+  targetId: Specimen
+
+- params: subject={path}
+  path: Patient.id
+  sourceId: Patient
+  targetId: Observation
+
+
+- params: subject={path}
+  path: Patient.id
+  sourceId: Patient
+  targetId: Procedure
+
+
+- params: specimen={path}
+  path: Specimen.id
+  sourceId: Specimen
+  targetId: ServiceRequest
+
+# Get documents
+
+# R5
+- params: based-on={path}
+  path: ServiceRequest.id
+  sourceId: ServiceRequest
+  targetId: DocumentReference
+
+- params: subject={path}
+  path: Patient.id
+  sourceId: Patient
+  targetId: DocumentReference
+
+- params: subject={path}
+  path: Group.id
+  sourceId: Group
+  targetId: DocumentReference
+
+- params: subject={path}
+  path: ResearchStudy.id
+  sourceId: ResearchStudy
+  targetId: DocumentReference
+
+- params: subject={path}
+  path: Patient.id
+  sourceId: Patient
+  targetId: ImagingStudy
+
+- params: subject={path}
+  path: Patient.id
+  sourceId: Patient
+  targetId: MedicationAdministration
+
+- params: subject={path}
+  path: Patient.id
+  sourceId: Patient
+  targetId: Encounter
+
+# R5
+- params: _id={path}&_count=1000&_total=accurate
+  path: MedicationAdministration.medication.reference.reference
+  sourceId: MedicationAdministration
+  targetId: Medication
+
