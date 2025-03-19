@@ -260,7 +260,7 @@ def results():
     default=["part-of-study"],
 )
 @click.argument("output_path", type=click.File("w"), required=False, default=DEFAULT_VISUALIZATION_PATH)
-def visualize(db_path: str, output_path: str, ignored_edges: list[str]) -> None:
+def visualize(db_path: str, output_path: click.File, ignored_edges: list[str]) -> None:
     """Visualize the FHIR Resources in the database.
 
     \b
@@ -321,7 +321,7 @@ def summarize(db_path: str) -> None:
     default="Specimen",
 )
 @click.argument("output_path", type=click.File("w"), required=False, default=DEFAULT_TSV_PATH)
-def dataframe(db_path: str, output_path: str, launch_dtale: bool, data_type: str) -> None:
+def dataframe(db_path: str, output_path: click.File, launch_dtale: bool, data_type: str) -> None:
     """Create dataframe from the local db.
     \b
     OUTPUT_PATH: Path to the output file. If not provided, the output will be written to ./fhir-graph.tsv
