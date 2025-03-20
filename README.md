@@ -1,12 +1,12 @@
 # fhir-query
-Leveraging FHIR R5 GraphDefinition for Data Traversals and Local Analysis
+Leveraging FHIR GraphDefinition for Data Traversals and Local Analysis
 
 
 ---
 
 ## Overview  
 
-This project leverages **FHIR R5 GraphDefinition** objects to define and execute graph-based traversals across multiple interconnected FHIR resource graphs. The data retrieved is written to a **local SQLite database** for persistence and later transformed into **analyst-friendly dataframes** for analysis using tools like Python’s pandas library.
+This project leverages **[FHIR GraphDefinition](https://hl7.org/fhir/graphdefinition.html)** objects to define and execute graph-based traversals across multiple interconnected FHIR resource graphs. The data retrieved is written to a **local SQLite database** for persistence and later transformed into **analyst-friendly dataframes** for analysis using tools like Python’s pandas library.
 
 ---
 
@@ -23,13 +23,13 @@ FHIR Search provides a robust querying framework but comes with significant limi
 3. **Lack of Explicit Traversals**:  
    Relationships in FHIR are implicit in references (e.g., `Observation.subject` pointing to `Patient`). This implicit structure requires manual composition of queries, which is prone to errors.  
 
-By using **FHIR R5 GraphDefinition**, we declaratively define resource relationships and efficiently retrieve data. Once retrieved, the data is stored locally and can be transformed into dataframes for advanced analysis.
+By using **FHIR GraphDefinition**, we declaratively define resource relationships and efficiently retrieve data. Once retrieved, the data is stored locally and can be transformed into dataframes for advanced analysis.
 
 ---
 
 ## Key Features  
 
-- **GraphDefinition-Driven Traversals**: Use R5 GraphDefinition objects to define explicit relationships between resources and automate traversal logic.  
+- **GraphDefinition-Driven Traversals**: Use GraphDefinition objects to define explicit relationships between resources and automate traversal logic.  
 - **Local SQLite Storage**: Persist the retrieved FHIR data in a local SQLite database for querying and offline analysis.  
 - **Analyst-Friendly Dataframes**: Convert stored FHIR resources into pandas dataframes for ease of use in analytical workflows.  
 - **Reusable Graph Definitions**: Maintain a library of GraphDefinition YAML files that can be reused across different workflows and projects.  
@@ -78,25 +78,24 @@ By using **FHIR R5 GraphDefinition**, we declaratively define resource relations
 ## Usage
 
 To use the `fq` command, you need to provide the necessary options. Below is an example of how to use the command:
-
 ```sh
-fq --fhir-base-url <FHIR_BASE_URL> \
-   --graph-definition-id <GRAPH_DEFINITION_ID> \
-   --path </Resource?params> \
-   [--graph-definition-file-path <GRAPH_DEFINITION_FILE_PATH>] \
-   [--db_path <DB_PATH>] \
-   [--debug]
 
-# example output
-✔ research-study-graph is valid FHIR R5 GraphDefinition
-✔ Running research-study-graph traversal
-✔ Processing link: Patient/_has:ResearchSubject:subject:study={path}&_revinclude=Group:member&_count=1000&_total=accurate with 1 ResearchStudy(s)
-✔ Processing link: Specimen/subject={path}&_revinclude=DocumentReference:subject&_revinclude=Group:member&_count=1000&_total=accurate with 537 Patient(s)
-✔ Processing link: Group/member={path}&_count=1000&_total=accurate with 17121 Specimen(s)
-✔ Processing link: DocumentReference/subject={path}&_count=1000&_total=accurate with 8169 Group(s)
-✔ Processing link: Observation/subject={path}&_count=1000&_total=accurate with 537 Patient(s)
-✔ Processing link: Procedure/subject={path}&_include=Procedure:encounter&_count=1000&_total=accurate with 537 Patient(s)
-Aggregated Results: {'DocumentReference': 24452, 'Encounter': 20, 'Group': 8169, 'MedicationAdministration': 1074, 'Observation': 23676, 'Patient': 537, 'Procedure': 1616, 'Specimen': 17121}
-   
-```   
-___
+fq --help
+Usage: fq [OPTIONS] COMMAND [ARGS]...
+
+  FHIR-Aggregator utilities.
+
+Commands:
+  ls          List all the installed GraphDefinitions.
+  run         Run GraphDefinition queries.
+  results     Work with the results of a GraphDefinition query.
+  vocabulary  FHIR-Aggregator's key Resources and CodeSystems.
+
+
+```
+
+Examples:
+
+* See [Vocabulary](https://colab.research.google.com/drive/1M2HkLxK_93jvOwPL8iU6te8s9TVne-r1?usp=sharing)
+* See [Patient SurvivalCurves](https://colab.research.google.com/drive/1g9EaDNFvlfpKfCQNakCClQxNKQ-kyc6Z?usp=sharing)
+* See [GraphDefinitions](https://colab.research.google.com/drive/1G1c_2gNNUdicFWeImN2_zFAjmSwfewYI?usp=drive_link)

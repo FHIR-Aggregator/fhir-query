@@ -1,5 +1,5 @@
 from click.testing import CliRunner
-from fhir_query.cli import cli
+from fhir_aggregator_client.cli import cli
 
 
 def test_default_option() -> None:
@@ -8,32 +8,30 @@ def test_default_option() -> None:
     result = runner.invoke(cli, ["--help"])
     print(result.output)
     output = result.output
-    for _ in ["main*", "summarize", "visualize"]:
+    for _ in ["run", "vocabulary", "ls", "results"]:
         assert _ in output, f"Expected {_} in {output}"
 
 
 def test_help_option() -> None:
     """Test help option."""
     runner = CliRunner()
-    result = runner.invoke(cli, ["main", "--help"])
+    result = runner.invoke(cli, ["run", "--help"])
     output = result.output
     print(output)
     assert "Usage:" in output
-    assert "--fhir-base-url" in output
-    assert "--graph-definition-id" in output
-    assert "--graph-definition-file-path" in output
-    assert "--path" in output
+    assert "GRAPH_DEFINITION" in output
+    assert "FHIR_QUERY" in output
     assert "--db-path" in output
-    assert "--dry-run" in output
     assert "--debug" in output
     assert "--log-file" in output
+    assert "--fhir-base-url" in output
 
 
 def test_visualize_help() -> None:
     """Test visualizer help."""
     runner = CliRunner()
-    result = runner.invoke(cli, ["visualize", "--help"])
+    result = runner.invoke(cli, ["results", "visualize", "--help"])
     output = result.output
     assert "Usage:" in output
     assert "--db-path" in output
-    assert "--output-path" in output
+    assert "OUTPUT_PATH" in output

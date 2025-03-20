@@ -5,9 +5,9 @@ import httpx
 import pytest
 from click.testing import CliRunner
 
-from fhir_query.cli import main
-from fhir_query.dataframer import Dataframer
-from fhir_query.visualizer import visualize_aggregation
+from fhir_aggregator_client.cli import cli as main
+from fhir_aggregator_client.dataframer import Dataframer
+from fhir_aggregator_client.visualizer import visualize_aggregation
 
 
 @pytest.mark.usefixtures("mock_fhir_server")
@@ -32,14 +32,13 @@ def test_runner(tmp_path: str) -> None:
     result = runner.invoke(
         main,
         [
+            "run",
+            "tests/fixtures/ResearchStudyGraph.yaml",
+            "/ResearchStudy?_id=123",
             "--fhir-base-url",
             "http://testserver",
-            "--path",
-            "/ResearchStudy?_id=123",
             "--db-path",
             f"{tmp_path}/fhir-query.sqlite",
-            "--graph-definition-file-path",
-            "tests/fixtures/ResearchStudyGraph.yaml",
             "--log-file",
             f"{tmp_path}/fhir-query.log",
             "--debug",

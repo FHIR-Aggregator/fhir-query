@@ -1,0 +1,1 @@
+recursive-include fhir_aggregator_client/graph-definitions *

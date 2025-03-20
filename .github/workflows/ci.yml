@@ -21,10 +21,10 @@ jobs:
           pip install .
 
       - name: Run Black
-        run: black --check --verbose fhir_query/ tests/
+        run: black --check --verbose fhir_aggregator_client/ tests/
 
       - name: Run Mypy
-        run: mypy --ignore-missing-imports  fhir_query/ tests/
+        run: mypy --ignore-missing-imports  fhir_aggregator_client/ tests/
 
       - name: Run Pytest
-        run: pytest
+        run: pytest tests/unit

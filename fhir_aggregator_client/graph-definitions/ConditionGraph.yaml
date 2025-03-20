@@ -1,5 +1,4 @@
-description: A graph to traverse ResearchStudy, ResearchSubject, Patient, Specimen,
-  and DocumentReference.
+description: "(FHIR-Aggregator) Condition to ResearchStudy and children. fhir-query '/Condition?code:text=cholangiocarcinoma'"
 id: condition-graph
 name: ConditionGraph
 resourceType: GraphDefinition
@@ -8,90 +7,88 @@ status: active
 # /Patient?_has:Condition:subject:code=Acinar%20cell%20carcinoma&_total=accurate
 link:
 
-- params: '_id={path}'
+- params: '_id={ref}'
   sourceId: Condition
   targetId: Patient
   path: Condition.subject.reference
 
-- params: 'subject={path}&_include=ResearchSubject:study'
+- params: 'individual={ref}&_include=ResearchSubject:study'
   sourceId: Patient
   targetId: ResearchSubject
   path: Patient.id
 
-- params:
-  sourceId: ResearchSubject
+- sourceId: ResearchSubject
   targetId: ResearchStudy
-  path:
 
-- params: member={path}
+- params: member={ref}
   sourceId: Patient
   targetId: Group
   path: Patient.id
 
 
-- params: subject={path}
+- params: subject={ref}
   path: Patient.id
   sourceId: Patient
   targetId: Specimen
 
-- params: subject={path}
+- params: subject={ref}
   path: Patient.id
   sourceId: Patient
   targetId: Observation
 
 
-- params: subject={path}
+- params: subject={ref}
   path: Patient.id
   sourceId: Patient
   targetId: Procedure
 
 
-- params: specimen={path}
+- params: specimen={ref}
   path: Specimen.id
   sourceId: Specimen
   targetId: ServiceRequest
 
 # Get documents
 
-# R5
-- params: based-on={path}
-  path: ServiceRequest.id
-  sourceId: ServiceRequest
-  targetId: DocumentReference
+## R5
+#- params: based-on={ref}
+#  path: ServiceRequest.id
+#  sourceId: ServiceRequest
+#  targetId: DocumentReference
 
-- params: subject={path}
+- params: subject={ref}&_count=1000&_total=accurate
   path: Patient.id
   sourceId: Patient
   targetId: DocumentReference
 
-- params: subject={path}
-  path: Group.id
-  sourceId: Group
-  targetId: DocumentReference
+- params: member={ref}&_count=1000&_total=accurate
+  sourceId: Patient
+  targetId: Group
+  path: Patient.id
 
-- params: subject={path}
+- params: subject={ref}&_count=1000&_total=accurate
   path: ResearchStudy.id
   sourceId: ResearchStudy
   targetId: DocumentReference
 
-- params: subject={path}
+- params: subject={ref}&_count=1000&_total=accurate
   path: Patient.id
   sourceId: Patient
   targetId: ImagingStudy
 
-- params: subject={path}
+- params: subject={ref}&_count=1000&_total=accurate
   path: Patient.id
   sourceId: Patient
   targetId: MedicationAdministration
 
-- params: subject={path}
+- params: subject={ref}&_count=1000&_total=accurate
   path: Patient.id
   sourceId: Patient
   targetId: Encounter
 
-# R5
-- params: _id={path}&_count=1000&_total=accurate
-  path: MedicationAdministration.medication.reference.reference
-  sourceId: MedicationAdministration
-  targetId: Medication
+## R5
+#- params: _id={ref}&_count=1000&_total=accurate
+#  path: MedicationAdministration.medication.reference.reference
+#  sourceId: MedicationAdministration
+#  targetId: Medication
 

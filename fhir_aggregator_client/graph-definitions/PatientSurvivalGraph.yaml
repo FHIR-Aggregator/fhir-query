@@ -1,0 +1,14 @@
+description: "(FHIR-Aggregator) Retrieve Patient and Observations [NCIT_C156418,NCIT_C156419]. fhir-query '/ResearchStudy?identifier=TCGA-BRCA'"
+id: patient-survival-graph
+name: PatientSurvivalGraph
+resourceType: GraphDefinition
+status: active
+link:
+- params: part-of-study={ref}&_count=1000&_total=accurate
+  path: ResearchStudy.id
+  sourceId: ResearchStudy
+  targetId: Patient
+- params: part-of-study={ref}&code=NCIT_C156418,NCIT_C156419&_count=1000&_total=accurate
+  path: ResearchStudy.id
+  sourceId: ResearchStudy
+  targetId: Observation

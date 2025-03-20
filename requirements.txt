@@ -4,12 +4,14 @@ pyyaml
 halo
 httpx
 
-fhir.resources==8.0.0b4
+fhir.resources
 dotty-dict
 pyvis
 click_default_group
 inflection
 pandas
+
+tabulate
 
 # nested_lookup
 # glom

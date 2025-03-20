@@ -1,59 +1,58 @@
-description: A graph to traverse ResearchStudy, ResearchSubject, Patient, Specimen,
-  and DocumentReference.
-id: research-study-graph
-name: ResearchStudyGraph
+description: "(FHIR-Aggregator) Retrieve a ResearchStudy and children. Uses part-of-study extension. fhir-query '/ResearchStudy?identifier=TCGA-BRCA'"
+
+id: research-study-part-of
+name: ResearchStudyPartOf
 resourceType: GraphDefinition
 status: active
 link:
-- params: part-of-study={path}&_count=1000&_total=accurate
+- params: 'study={ref}'
   sourceId: ResearchStudy
   targetId: ResearchSubject
   path: ResearchStudy.id
-- params: part-of-study={path}&_count=1000&_total=accurate
+- params: part-of-study={ref}&_count=1000&_total=accurate
   sourceId: ResearchStudy
   targetId: Group
   path: ResearchStudy.id
-- params: part-of-study={path}&_count=1000&_total=accurate
+- params: part-of-study={ref}&_count=1000&_total=accurate
   path: ResearchStudy.id
   sourceId: ResearchStudy
   targetId: Patient
-- params: part-of-study={path}&_count=1000&_total=accurate
+- params: part-of-study={ref}&_count=1000&_total=accurate
   path: ResearchStudy.id
   sourceId: ResearchStudy
   targetId: Specimen
-- params: part-of-study={path}&_count=1000&_total=accurate
+- params: part-of-study={ref}&_count=1000&_total=accurate
   path: ResearchStudy.id
   sourceId: ResearchStudy
   targetId: Observation
-- params: part-of-study={path}&_count=1000&_total=accurate
+- params: part-of-study={ref}&_count=1000&_total=accurate
   path: ResearchStudy.id
   sourceId: ResearchStudy
   targetId: Procedure
-- params: part-of-study={path}&_count=1000&_total=accurate
+- params: part-of-study={ref}&_count=1000&_total=accurate
   path: ResearchStudy.id
   sourceId: ResearchStudy
   targetId: DocumentReference
-- params: part-of-study={path}&_count=1000&_total=accurate
+- params: part-of-study={ref}&_count=1000&_total=accurate
   path: ResearchStudy.id
   sourceId: ResearchStudy
   targetId: ServiceRequest
-- params: part-of-study={path}&_count=1000&_total=accurate
+- params: part-of-study={ref}&_count=1000&_total=accurate
   path: ResearchStudy.id
   sourceId: ResearchStudy
   targetId: ImagingStudy
-- params: part-of-study={path}&_count=1000&_total=accurate
+- params: part-of-study={ref}&_count=1000&_total=accurate
   path: ResearchStudy.id
   sourceId: ResearchStudy
   targetId: Condition
-
-- params: part-of-study={path}&_count=1000&_total=accurate
+- params: part-of-study={ref}&_count=1000&_total=accurate
   path: ResearchStudy.id
   sourceId: ResearchStudy
   targetId: MedicationAdministration
 
-# R4
-- params: _id={path}&_count=1000&_total=accurate
-  path: MedicationAdministration.medicationReference.reference
+# R5
+- params: _id={ref}&_count=1000&_total=accurate
+  path: MedicationAdministration.medication.reference.reference
   sourceId: MedicationAdministration
   targetId: Medication
 

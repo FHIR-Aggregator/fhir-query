@@ -1,6 +1,6 @@
 from pyvis.network import Network
 
-from fhir_query import ResourceDB
+from fhir_aggregator_client import ResourceDB
 
 
 def _container():
