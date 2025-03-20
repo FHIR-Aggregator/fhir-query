@@ -41,7 +41,7 @@ def test_vocabulary(fhir_base_urls, expected_study_identifiers, tmp_path):
             assert actual_study_identifiers == expected_study_identifiers, [
                 [_ for _ in actual_study_identifiers.difference(expected_study_identifiers)],
                 [_ for _ in expected_study_identifiers.difference(actual_study_identifiers)],
-                base_url
+                base_url,
             ]
         except Exception as e:
             exceptions.append(e)
