@@ -25,7 +25,7 @@ def test_run_patient_survival_graph(fhir_base_urls, tmp_path):
 
         result = runner.invoke(
             cli,
-            ["--fhir-base-url", base_url, "--db-path", db_path, "patient-survival-graph", "/ResearchStudy?identifier=TCGA-BRCA"],
+            ["run", "--fhir-base-url", base_url, "--db-path", db_path, "patient-survival-graph", "/ResearchStudy?identifier=TCGA-BRCA"],
         )
 
         assert result.exit_code == 0, result.output
